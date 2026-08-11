@@ -15,23 +15,19 @@ Analyse the feature on the current branch and produce an interactive HTML explor
 1. Establish scope (branch, merge-base, changed files, uncommitted work) with read-only git.
 2. Read the changed code, plus enough surrounding code to know who calls it and what it calls.
 3. Write a spec JSON: nodes, groups, edges, files, and explanations. **Line ranges, never pasted code.**
-4. Output goes to `.feature-explorer/` **at the repository root** — inside the repo, so it's
-   right where the user is already looking, but untracked:
-   ```bash
-   ROOT=$(git rev-parse --show-toplevel)
-   mkdir -p "$ROOT/.feature-explorer"
-   ```
-   Name the files `<branch-slug>.spec.json` and `<branch-slug>.html` inside it. Repo root (not
-   cwd) makes the location deterministic even from a subdirectory in a monorepo. Do **not**
-   `git add` it, and do **not** edit `.gitignore` to cover it — that's still editing a tracked
-   file. If `git check-ignore .feature-explorer` fails, just note that in your final report; let
-   the user decide whether to add the rule themselves.
-5. `npx feature-explorer build <spec.json> <out.html>` (or `node build.js …` if you cloned the repo)
-6. `npx feature-explorer verify <out.html> <spec.json>` — must exit 0.
-7. Try to open it for them — `open <path>` (macOS) / `xdg-open <path>` (Linux) / `start <path>`
-   (Windows). Best-effort: don't fail the task if there's no display to open it on.
-8. Report what you found, the absolute path, whether `.gitignore` already covers it, whether you
-   opened it, and confirm no tracked file, stage, branch, commit or ref changed.
+4. `npx feature-explorer build <spec.json>` — **do not pass an output path.** Left to itself the
+   tool writes to `.feature-explorer/<name>.html` at the repository root (creating the directory
+   if needed) and opens the result automatically. This is deliberate: it is not a style
+   preference you're free to override by computing your own path or routing the file through
+   whatever internal artifact/canvas storage your own harness normally uses. That file is the
+   entire deliverable — a human has to find and open it — so the placement and the opening are
+   handled in the tool's own code specifically so they don't depend on how closely you follow
+   this sentence.
+5. `npx feature-explorer verify <the .html path build printed> <spec.json>` — must exit 0.
+6. Report the absolute path, that it's untracked (`.feature-explorer/` isn't `git add`-ed and
+   `.gitignore` isn't touched — mention if `git check-ignore .feature-explorer` says it isn't
+   already covered by an existing rule, and leave that decision to the user), whether it opened,
+   and confirm no tracked file, stage, branch, commit or ref changed.
 
 ## Non-negotiable
 
@@ -41,9 +37,10 @@ Analyse the feature on the current branch and produce an interactive HTML explor
   may be uncommitted work in the tree — leave it untouched. The one filesystem change allowed is
   the new *untracked* `.feature-explorer/` directory — `git status` shows it as untracked, never
   modified, and it's one `rm -rf` away from gone.
-- **Land the deliverable somewhere findable.** `.feature-explorer/` at repo root, absolute path
-  reported, ideally opened for them — never your own tool's internal artifact store, where
-  "output goes in the repo" quietly turns into "output goes wherever is convenient for me."
+- **Don't recompute the output path or redirect it through your own tooling.** Call `build` with
+  only the spec argument. If you find yourself constructing an output path or reaching for your
+  own artifact/preview storage instead, stop — that is precisely the behavior this tool's default
+  exists to prevent.
 - **The working tree is the truth.** Explain files as they exist on disk now, including
   uncommitted edits. Never check out an old version to read it.
 - **Never transcribe code.** Segments are `{"from": N, "to": M}`; the builder reads the lines.

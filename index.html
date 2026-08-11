@@ -449,11 +449,11 @@ code lines checked: 138   mismatches: 0
               </div>
               <pre id="cb-say">Run npx feature-explorer init and follow what it prints, on the current branch.</pre>
             </div>
-            <p style="margin-top:12px">It reads the branch, writes a spec, then
-              <code>npx …&nbsp;build</code> and <code>npx …&nbsp;verify</code> render and check
-              the page the same way — into <code>.feature-explorer/</code> at your repo root,
-              untracked. You get back one HTML file — open it. No server, nothing to deploy,
-              nothing stays installed.</p>
+            <p style="margin-top:12px">It reads the branch, writes a spec, then runs
+              <code>build</code> and <code>verify</code> the same way. The output path isn't left
+              to whichever agent you're using to decide — <code>build</code> defaults it to
+              <code>.feature-explorer/</code> at your repo root (untracked) and opens the result
+              itself. No server, nothing to deploy, nothing stays installed.</p>
           </div>
         </div>
       </div>

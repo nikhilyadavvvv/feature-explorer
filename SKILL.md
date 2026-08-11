@@ -40,22 +40,27 @@ Do not modify something intending to restore it afterwards.
 Before running any command, ask: *can this alter a tracked file, the index, refs, dependencies or
 configuration?* If yes or unsure, don't.
 
-**Output location: `.feature-explorer/` at the repository root — inside the repo, not off in the
-user's cwd or your own tool's internal scratch directory.** Concretely:
+**Output location is not yours to decide.** Write the spec JSON to
+`.feature-explorer/<branch-slug>.spec.json` (create the directory yourself —
+`mkdir -p "$(git rev-parse --show-toplevel)/.feature-explorer"` — since you write this file
+before calling `build`), then:
 
 ```bash
-ROOT=$(git rev-parse --show-toplevel)
-mkdir -p "$ROOT/.feature-explorer"
-npx feature-explorer build  "$ROOT/.feature-explorer/<branch-slug>.spec.json" "$ROOT/.feature-explorer/<branch-slug>.html"
+npx feature-explorer build .feature-explorer/<branch-slug>.spec.json
 ```
 
-That directory is deterministic regardless of which subdirectory you were invoked from (real in a
-monorepo), and it's exactly where the user is already looking — inside the repo they're working
-in — rather than some cwd they may not remember or a tool-internal path they can't find. It is
-**not** tracked: don't `git add` it, and don't edit `.gitignore` to cover it either (that's still
-editing a tracked file). If `git check-ignore .feature-explorer` fails (the directory isn't
-covered by an existing rule), just say so in your final report and suggest the user add it
-themselves — never make that edit for them.
+**No second argument.** Left to itself, `build` writes to `.feature-explorer/<name>.html` at the
+repository root — resolved from `git rev-parse --show-toplevel`, so it's correct regardless of
+which subdirectory you were invoked from — and opens the result automatically. That is a
+deliberate design decision, not a default you're free to improve on: computing your own output
+path, or routing the file through whatever internal artifact/canvas storage your own tooling
+normally uses for generated content, is exactly the failure mode this exists to prevent. The page
+is the deliverable; a human has to find and open it without first learning your tool's storage
+conventions.
+
+`.feature-explorer/` is **not** tracked: don't `git add` it, and don't edit `.gitignore` to cover
+it either — that's still editing a tracked file. If `git check-ignore .feature-explorer` fails
+(no existing rule covers it), say so in your final report and leave the decision to the user.
 
 "Read-only" means precisely this: no tracked file is touched, nothing is staged, no commit/branch/
 ref changes. A new *untracked* directory sitting in the working tree satisfies that — `git status`
@@ -163,11 +168,13 @@ line of a 200-line function — choose the parts that carry the design.
 ## 7. Build, verify, and check before sharing
 
 ```bash
-npx feature-explorer build  <spec.json> <out.html>
-npx feature-explorer verify <out.html>   <spec.json>
+npx feature-explorer build  <spec.json>              # no second arg — see section 0
+npx feature-explorer verify <the path build printed> <spec.json>
 ```
 
-(`node build.js`/`node verify.js` if you have a local clone — identical either way.)
+If you have a local clone, `node build.js <spec.json> <out.html>` runs the identical renderer —
+but the CLI's output-location default and auto-open are wrapper behavior, not in `build.js`
+itself, so the raw script always needs both arguments.
 
 `verify.js` must exit 0. If it reports a mismatch, the line numbers in the spec are wrong — fix
 the range, never the quoted text.
