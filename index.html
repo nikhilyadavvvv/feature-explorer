@@ -178,15 +178,25 @@ h2{ font-family:var(--font-head); font-size:28px; font-weight:700; letter-spacin
 .demo-caption a{ color:var(--muted) }
 
 /* ---------- install ---------- */
-.install-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px }
-.install-grid .card h3{ display:flex; align-items:center; gap:9px }
-.install-grid .card h3 .tag{ font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--dim); border:1px solid var(--line); border-radius:4px; padding:1px 6px }
-.gen-steps{ display:grid; gap:14px; margin-top:8px }
-.gen-step{ display:grid; grid-template-columns:34px 1fr; gap:14px; align-items:start }
-.gen-step .n{ font-family:var(--font-head); font-weight:700; font-size:13px; color:var(--dim); padding-top:2px }
-.gen-step .body p{ margin:0 0 8px; font-size:14.5px; color:var(--muted); line-height:1.6 }
-.gen-step .body p code{ color:var(--fg); background:var(--code-bg); border:1px solid var(--line); border-radius:3px; padding:0 5px; font-size:13px }
-.doclinks{ display:flex; gap:14px; flex-wrap:wrap; margin-top:26px; padding-top:24px; border-top:1px solid var(--line) }
+/* One flow, not a menu of options: clone, then one sentence to whatever agent you use.
+   Everything else (the Claude Code shortcut, build.js/verify.js internals) is secondary
+   and stays out of the way instead of competing with the two steps that actually matter. */
+.install-flow{ max-width:640px }
+.install-step{ display:flex; gap:16px; margin-bottom:22px }
+.install-step .n{ font-family:var(--font-head); font-weight:700; font-size:15px; color:var(--accent); flex:0 0 auto; padding-top:13px }
+.install-step .body{ flex:1; min-width:0 }
+.install-step p{ margin:0 0 12px; font-size:15px; color:var(--fg); line-height:1.65 }
+.install-step p code{ color:var(--bright); background:var(--code-bg); border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-size:13.5px }
+.install-note{ font-size:14px; color:var(--muted); line-height:1.65; margin:0 0 32px }
+.install-note code{ color:var(--fg); background:var(--code-bg); border:1px solid var(--line); border-radius:3px; padding:0 5px; font-size:13px }
+.tip{
+  display:flex; gap:12px; align-items:flex-start; border:1px dashed var(--line-strong); border-radius:8px;
+  padding:14px 16px; margin:0 0 30px; font-size:13.5px; color:var(--muted); line-height:1.6;
+}
+.tip .ic{ flex:0 0 auto; width:17px; height:17px; color:var(--dim); margin-top:1px }
+.tip b{ color:var(--fg); font-weight:600 }
+.tip code{ color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:3px; padding:0 5px; font-size:12.5px }
+.doclinks{ display:flex; gap:14px; flex-wrap:wrap; margin-top:0; padding-top:24px; border-top:1px solid var(--line) }
 .doclinks a{ font-family:var(--font-head); font-size:13px; text-decoration:none; color:var(--muted); display:inline-flex; align-items:center; gap:6px }
 .doclinks a:hover{ color:var(--accent) }
 
@@ -419,86 +429,49 @@ code lines checked: 138   mismatches: 0
   <section id="install">
     <p class="wrap eyebrow" style="margin-bottom:0">Install</p>
     <div class="wrap">
-      <h2>Two ways to run it.</h2>
+      <h2>Two steps.</h2>
       <p class="section-lede">
-        The procedure lives in two plain-text files — a Claude Code skill wrapper, and an
-        agent-agnostic version underneath it. Neither has a dependency on the other agent's
-        tooling.
+        Clone it, then say one sentence to whatever agent you already use. That's the install.
       </p>
-      <div class="install-grid">
-        <div class="card">
-          <h3>As a Claude Code skill <span class="tag">recommended</span></h3>
-          <p>Clone it once, symlink it into your skills directory, then invoke it by name in any
-            repository.</p>
-          <div class="codeblock">
-            <div class="cb-head">
-              <span class="cb-label">bash</span>
-              <button class="copy-btn" type="button" data-copy-target="cb-skill">Copy</button>
-            </div>
-            <pre id="cb-skill"><span class="c-mut"># clone once</span>
-git clone https://github.com/nikhilyadavvvv/feature-explorer.git
 
-<span class="c-mut"># link it into Claude Code's skills directory</span>
-mkdir -p ~/.claude/skills
-ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer</pre>
+      <div class="install-flow">
+        <div class="install-step">
+          <div class="n">1</div>
+          <div class="body">
+            <p>Clone it once, anywhere.</p>
+            <div class="codeblock">
+              <div class="cb-head">
+                <span class="cb-label">bash</span>
+                <button class="copy-btn" type="button" data-copy-target="cb-clone">Copy</button>
+              </div>
+              <pre id="cb-clone">git clone https://github.com/nikhilyadavvvv/feature-explorer.git</pre>
+            </div>
           </div>
-          <p style="margin-top:14px">Then, in any repository, inside Claude Code:
-            <code>/feature-explorer</code></p>
         </div>
-        <div class="card">
-          <h3>With any other agent</h3>
-          <p>Cursor, Copilot, Aider, Codex, or plain chat with file access — point it at
-            <code>PROMPT.md</code>. Same procedure, without the Claude-specific wrapper.</p>
-          <div class="codeblock">
-            <div class="cb-head">
-              <span class="cb-label">bash</span>
-              <button class="copy-btn" type="button" data-copy-target="cb-generic">Copy</button>
-            </div>
-            <pre id="cb-generic"><span class="c-mut"># clone once</span>
-git clone https://github.com/nikhilyadavvvv/feature-explorer.git
 
-<span class="c-mut"># give your agent the procedure</span>
-<span class="c-mut">#   "Follow feature-explorer/PROMPT.md on the current branch"</span></pre>
+        <div class="install-step">
+          <div class="n">2</div>
+          <div class="body">
+            <p>In your own repository, on the branch you want explained, tell your agent —
+              Claude Code, Cursor, Copilot, Aider, or plain chat with file access:</p>
+            <div class="codeblock">
+              <div class="cb-head">
+                <span class="cb-label">say this</span>
+                <button class="copy-btn" type="button" data-copy-target="cb-say">Copy</button>
+              </div>
+              <pre id="cb-say">Follow feature-explorer/PROMPT.md on the current branch.</pre>
+            </div>
+            <p style="margin-top:12px">It reads the branch, writes a spec, and hands you back
+              one HTML file. Open it — no server, nothing to deploy, nothing to install.</p>
           </div>
-          <p style="margin-top:14px">Requires Node — any version with <code>fs</code>/<code>path</code>.
-            No install step, no dependencies.</p>
         </div>
       </div>
 
-      <div class="card" style="margin-top:8px">
-        <h3 style="margin-bottom:4px">Generate your own explorer</h3>
-        <p style="margin-bottom:18px">The agent does the analysis and writes a spec; two plain
-          Node scripts do the rest.</p>
-        <div class="gen-steps">
-          <div class="gen-step">
-            <div class="n">01</div>
-            <div class="body">
-              <p>The agent reads your branch and writes <code>my-feature.spec.json</code> —
-                nodes, groups, edges, files, and explanations, following
-                <a href="https://github.com/nikhilyadavvvv/feature-explorer/blob/main/SCHEMA.md" target="_blank" rel="noopener">SCHEMA.md</a>.</p>
-            </div>
-          </div>
-          <div class="gen-step">
-            <div class="n">02</div>
-            <div class="body">
-              <div class="codeblock">
-                <div class="cb-head">
-                  <span class="cb-label">bash</span>
-                  <button class="copy-btn" type="button" data-copy-target="cb-gen">Copy</button>
-                </div>
-                <pre id="cb-gen">node build.js  my-feature.spec.json  my-feature.html
-node verify.js my-feature.html       my-feature.spec.json</pre>
-              </div>
-            </div>
-          </div>
-          <div class="gen-step">
-            <div class="n">03</div>
-            <div class="body">
-              <p><code>open my-feature.html</code> — self-contained, no server, nothing to
-                deploy to show someone.</p>
-            </div>
-          </div>
-        </div>
+      <div class="tip">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="M12 3v18M4 8l8 5 8-5"/></svg>
+        <div><b>Using Claude Code?</b> Skip the sentence — symlink it once
+          (<code>ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer</code>) and just
+          type <code>/feature-explorer</code> in any repository from then on.</div>
       </div>
 
       <div class="doclinks">
