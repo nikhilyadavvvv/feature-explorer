@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature Architecture Explorer</title>
+<style>
+:root{
+  --bg:#0a0c10; --panel:#11141a; --panel2:#151922; --line:#212734; --line2:#2b3342;
+  --fg:#e6e9ef; --fg2:#a7b0c0; --mut:#727d90; --dim:#525c6e;
+  --added:#3fb950; --mod:#d29922; --unc:#a371f7; --sup:#6e7681; --infra:#58a6ff; --store:#39c5cf;
+  --flow:#58a6ff; --danger:#f85149;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2a3140;border-radius:6px;border:2px solid var(--panel)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- shell ---------- */
+#app{display:flex;flex-direction:column;height:100%}
+header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#12161d,#0d1015);flex:0 0 auto}
+.hrow{display:flex;align-items:flex-start;gap:22px 26px;padding:13px 18px 12px;flex-wrap:wrap}
+.htitle{min-width:0;flex:1 1 auto}
+.htitle h1{margin:0 0 5px;font-size:14.5px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.htitle h1 .dotmark{width:7px;height:7px;border-radius:50%;background:var(--flow);box-shadow:0 0 0 3px rgba(88,166,255,.14)}
+.branches{display:flex;flex-wrap:wrap;gap:6px}
+.br{display:inline-flex;align-items:center;gap:6px;font:11px/1 var(--mono);color:var(--fg2);background:#0e1218;border:1px solid var(--line2);border-radius:5px;padding:4px 7px}
+.br b{color:var(--mut);font-weight:500}
+/* Full-width own row: squeezed into a narrow column this text wrapped to ~10 lines and made the header 376px tall. */
+.hsum{flex:1 1 100%;order:3;color:var(--fg2);font-size:12.3px;max-width:1180px}
+@media (min-width:1750px){.hsum{flex:1 1 460px;order:0;min-width:340px}}
+.hsum em{color:var(--fg);font-style:normal;font-weight:600}
+.hsum code{font:11.5px var(--mono);color:#9fd0ff;background:#0e1622;border:1px solid #1d2b3d;border-radius:4px;padding:1px 4px}
+.stats{display:flex;gap:0;flex:0 0 auto;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0e1117}
+.stat{padding:7px 13px;border-right:1px solid var(--line);text-align:center;min-width:66px}
+.stat:last-child{border-right:0}
+.stat .v{font:600 15px/1.1 var(--mono);color:var(--fg)}
+.stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-top:3px}
+
+/* ---------- toolbar ---------- */
+.tools{display:flex;align-items:center;gap:8px;padding:7px 18px;border-top:1px solid var(--line);background:#0d1014;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{padding:5px 10px;font-size:11.5px;color:var(--fg2);border-right:1px solid var(--line2)}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:#171c25;color:var(--fg)}
+.seg button.on{background:#1b2534;color:#cfe6ff;box-shadow:inset 0 -2px 0 var(--flow)}
+.tbtn{padding:5px 10px;font-size:11.5px;color:var(--fg2);border:1px solid var(--line2);border-radius:7px}
+.tbtn:hover{background:#171c25;color:var(--fg)}
+.tbtn.on{background:#1b2534;color:#cfe6ff;border-color:#2f4a6b}
+.spacer{flex:1}
+.searchwrap{position:relative}
+#search{width:280px;padding:6px 10px 6px 28px;background:#0b0e13;border:1px solid var(--line2);border-radius:7px;color:var(--fg);font-size:12px;outline:none}
+#search:focus{border-color:#31527a;box-shadow:0 0 0 3px rgba(88,166,255,.1)}
+.searchwrap .ic{position:absolute;left:9px;top:6px;color:var(--mut);font-size:12px}
+.kbd{font:10px var(--mono);color:var(--mut);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 4px}
+#results{position:absolute;top:34px;left:0;width:420px;max-height:340px;overflow:auto;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 40px rgba(0,0,0,.6);z-index:60;display:none}
+#results.on{display:block}
+.res{display:flex;align-items:center;gap:9px;padding:7px 11px;border-bottom:1px solid var(--line);cursor:pointer}
+.res:last-child{border-bottom:0}
+.res:hover,.res.sel{background:#1c2331}
+.res .rl{font-size:12px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .rp{font:10.5px var(--mono);color:var(--mut);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;direction:rtl;text-align:left}
+
+/* ---------- body ---------- */
+.body{flex:1;display:grid;grid-template-columns:274px minmax(0,1fr) 500px;min-height:0}
+.pane{min-height:0;overflow:auto;background:var(--panel)}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line);background:#0f1218}
+#center{background:#0b0e12;position:relative;overflow:hidden}
+
+.sec{border-bottom:1px solid var(--line)}
+.sech{display:flex;align-items:center;gap:7px;padding:9px 13px;font-size:10.5px;text-transform:uppercase;letter-spacing:.075em;color:var(--mut);font-weight:600;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--panel);z-index:5}
+.sech:hover{color:var(--fg2)}
+.sech .cnt{margin-left:auto;font:10px var(--mono);color:var(--dim);background:#0d1116;border:1px solid var(--line);border-radius:9px;padding:1px 6px}
+.sech .tw{transition:transform .16s;font-size:9px;color:var(--dim)}
+.sec.closed .tw{transform:rotate(-90deg)}
+.sec.closed .secb{display:none}
+.secb{padding:2px 0 9px}
+
+.grp{margin:5px 0 2px;padding:0 13px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);display:flex;align-items:center;gap:6px}
+.grp:before{content:"";height:1px;flex:1;background:var(--line);order:2}
+.f{display:flex;align-items:center;gap:8px;padding:3px 13px 3px 15px;cursor:pointer;font-size:11.8px;color:var(--fg2)}
+.f:hover{background:#161b23;color:var(--fg)}
+.f.act{background:#1a2230;color:#fff;box-shadow:inset 2px 0 0 var(--flow)}
+.st{flex:0 0 15px;height:15px;border-radius:3px;font:600 9px/15px var(--mono);text-align:center;color:#0a0c10}
+.st.A{background:var(--added)} .st.M{background:var(--mod)} .st.U{background:var(--unc)} .st.S{background:var(--sup);color:#e6e9ef} .st.I{background:var(--infra)}
+.fp{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11px}
+.fu{flex:0 0 auto;color:var(--unc);font-size:10px;title:"has uncommitted edits"}
+.fmeta{font:9.5px var(--mono);color:var(--dim);flex:0 0 auto}
+
+.legend{padding:4px 13px 12px;display:grid;gap:5px}
+.lg{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fg2)}
+.lg .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.lg .ln{width:22px;height:0;border-top:2px solid var(--mut);flex:0 0 auto}
+.lg .ln.d{border-top-style:dashed}
+.lg .ln.t{border-top-style:dotted}
+.lg .ln.f{border-color:var(--flow);border-top-width:3px}
+
+/* ---------- graph ---------- */
+#svgwrap{position:absolute;inset:0}
+svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+svg.drag{cursor:grabbing}
+.gbox{fill:#0d1117;fill-opacity:.62;stroke:var(--line2);stroke-width:1;rx:12}
+.gbox.hot{stroke:#31527a}
+.glab{font:600 9.5px var(--sans);letter-spacing:.09em;text-transform:uppercase;fill:var(--mut)}
+.gcnt{font:9px var(--mono);fill:var(--dim)}
+.gtog{fill:#161c26;stroke:var(--line2);rx:4;cursor:pointer}
+.gtog:hover{fill:#1f2836}
+.gtogl{font:9px var(--mono);fill:var(--fg2);pointer-events:none;text-anchor:middle}
+
+.nd{cursor:pointer}
+.nb{stroke-width:1.2;rx:7;fill:#141922;stroke:var(--line2)}
+.nd:hover .nb{fill:#1b2230}
+.nd.sel .nb{stroke-width:2}
+.nl{font:600 11.2px var(--sans);fill:var(--fg)}
+.ns{font:10px var(--mono);fill:var(--mut)}
+.nk{font:8.5px var(--sans);letter-spacing:.05em;text-transform:uppercase}
+.nbar{rx:2}
+.nd.dim{opacity:.16}
+.nd.dim2{opacity:.4}
+/* Tests read as verification, not production code: dashed outline, cooler fill. */
+.nd[data-kind="test"] .nb{stroke-dasharray:5 3;fill:#101a18}
+.nd[data-kind="test"]:hover .nb{fill:#16241f}
+.ndot{r:3}
+.edge{fill:none;stroke:#39424f;stroke-width:1.3;pointer-events:stroke}
+.edge:hover{stroke:#7fb4e8;stroke-width:2.2}
+.edge.data{stroke-dasharray:1.5 3.5}
+.edge.http{stroke-dasharray:6 4}
+.edge.db{stroke-width:2;stroke:#2f5560}
+.edge.inf{stroke-dasharray:2 4;stroke:#4a4258}
+.edge.flow{stroke:var(--flow);stroke-width:2.4;filter:url(#glow)}
+.edge.hi{stroke:#9fd0ff;stroke-width:2.4}
+.edge.dim{opacity:.1}
+.el{font:9.5px var(--mono);fill:var(--mut);pointer-events:none}
+.el.flow{fill:#9fd0ff}
+.el.dim{opacity:.08}
+.eb{fill:#0b0e12;fill-opacity:.96;stroke:#1a2130;stroke-width:.6}
+.flowrank{font:700 9px var(--mono);fill:#0a0c10}
+
+.hint{position:absolute;left:12px;bottom:10px;font:10.5px var(--mono);color:var(--dim);pointer-events:none;background:rgba(10,12,16,.8);padding:3px 7px;border-radius:5px}
+#tip{position:absolute;pointer-events:none;z-index:40;max-width:320px;background:#161b24;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;box-shadow:0 14px 32px rgba(0,0,0,.6);display:none;font-size:11.5px;color:var(--fg2)}
+#tip.on{display:block}
+#tip b{display:block;color:var(--fg);font-size:12px;margin-bottom:3px}
+#tip .p{font:10px var(--mono);color:var(--mut);margin-top:5px}
+
+/* ---------- inspector ---------- */
+.iempty{padding:44px 26px;color:var(--mut);text-align:center}
+.iempty .big{font-size:30px;margin-bottom:12px;opacity:.35}
+.ihead{padding:13px 15px 12px;border-bottom:1px solid var(--line);background:#12161d;position:sticky;top:0;z-index:6}
+.crumbs{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:8px;font-size:10.5px}
+.crumbs .cb{color:var(--mut);padding:2px 5px;border-radius:4px;cursor:pointer;font-family:var(--mono)}
+.crumbs .cb:hover{background:#1b2230;color:var(--fg)}
+.crumbs .cs{color:var(--dim)}
+.crumbs .cb.now{color:#cfe6ff;background:#1a2433}
+.ihead h2{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font:600 9.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:4px;border:1px solid}
+.ipath{font:11px var(--mono);color:var(--fg2);word-break:break-all;margin-top:6px;display:flex;gap:7px;align-items:baseline}
+.ipath .rp{color:var(--dim)}
+.ipath .ln{color:#9fd0ff;flex:0 0 auto}
+.ikind{font:10px var(--mono);color:var(--mut);margin-top:4px}
+
+.isec{border-bottom:1px solid var(--line);padding:12px 15px}
+.isec h3{margin:0 0 8px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:650}
+.isum{color:var(--fg2);font-size:12.3px}
+.isum strong{color:var(--fg);font-weight:600}
+.isum code,.rel code{font:11px var(--mono);color:#9fd0ff;background:#0e1622;border:1px solid #1d2b3d;border-radius:4px;padding:0 3px}
+
+.rels{display:grid;gap:9px}
+.relg .rt{font:9.5px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.rel{display:flex;align-items:baseline;gap:7px;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:11.7px}
+.rel:hover{background:#1a2230}
+.rel .ar{color:var(--dim);font-family:var(--mono);flex:0 0 auto}
+.rel .rn{color:#cfe6ff;flex:0 0 auto;font-weight:500}
+.rel .rd{color:var(--mut);font:10.5px var(--mono);margin-left:auto;flex:0 0 auto}
+.rel .inf{color:var(--unc);font-size:9.5px;border:1px solid #3a2f52;border-radius:3px;padding:0 3px}
+
+.code{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0b0e13;margin-bottom:9px}
+/* NB: named .cseg, not .seg — .seg is the toolbar segmented control (display:flex) and would squash the code. */
+.cseg{border-bottom:1px solid var(--line)}
+.cseg:last-child{border-bottom:0}
+.lines{overflow-x:auto;padding:5px 0}
+.ln2{display:flex;font:11.5px/1.62 var(--mono);white-space:pre}
+.ln2:hover{background:#121821}
+.ln2 .g{flex:0 0 46px;text-align:right;padding-right:11px;color:#3f4a5c;user-select:none;position:sticky;left:0;background:#0b0e13}
+.ln2:hover .g{background:#121821;color:#6b7688}
+/* flex:0 0 auto + max-content: without these the code column shrank below its content
+   and long lines wrapped into 100px-tall rows instead of scrolling horizontally. */
+.ln2 .c{padding-right:16px;flex:0 0 auto;min-width:max-content}
+.gapl{display:flex;font:11px var(--mono);color:var(--dim);padding:1px 0}
+.gapl .g{flex:0 0 46px;text-align:right;padding-right:11px;user-select:none}
+.note{padding:7px 11px 8px 57px;background:#0e1319;border-top:1px dashed #1e2634;color:var(--fg2);font-size:11.9px}
+.note:before{content:"→";color:var(--flow);margin-right:6px;font-family:var(--mono)}
+.note b{color:var(--fg);font-weight:600}
+.note code{font:11px var(--mono);color:#9fd0ff}
+.nonotes .note{display:none}
+
+/* syntax — namespaced: single-letter classes collided with .f (sidebar file row, display:flex)
+   and .c (the code cell), which turned function-name tokens into flex blocks and wrapped lines. */
+.tk-k{color:#ff7b72}.tk-s{color:#a5d6ff}.tk-c{color:#6a7684;font-style:italic}
+.tk-n{color:#79c0ff}.tk-f{color:#d2a8ff}.tk-t{color:#7ee787}
+
+.foot{padding:11px 15px 26px;color:var(--dim);font-size:10.5px;line-height:1.6}
+.foot b{color:var(--mut)}
+
+@media (max-width:1500px){.body{grid-template-columns:250px minmax(0,1fr) 440px}}
+@media (max-width:1180px){
+  .body{grid-template-columns:1fr;grid-template-rows:auto minmax(320px,46vh) minmax(0,1fr)}
+  #left{border-right:0;border-bottom:1px solid var(--line);max-height:200px}
+  #right{border-left:0;border-top:1px solid var(--line)}
+  .hsum{flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="hrow">
+      <div class="htitle">
+        <h1><span class="dotmark"></span><span id="ftitle">Feature Architecture</span></h1>
+        <div class="branches" id="branches"></div>
+      </div>
+      <div class="hsum" id="overview"></div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="tools">
+      <div class="seg" id="filters"></div>
+      <button class="tbtn" id="flowBtn">◆ Feature Flow</button>
+      <button class="tbtn" id="notesBtn">Explanations</button>
+      <span class="spacer"></span>
+      <div class="searchwrap">
+        <span class="ic">⌕</span>
+        <input id="search" placeholder="Search symbols, files, endpoints…" autocomplete="off" spellcheck="false">
+        <div id="results"></div>
+      </div>
+      <button class="tbtn" id="fitBtn">Fit</button>
+      <button class="tbtn" id="resetBtn">Reset</button>
+      <span class="kbd">/</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="pane" id="left"></div>
+    <div id="center">
+      <div id="svgwrap">
+        <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMinYMin slice">
+          <defs>
+            <filter id="glow" x="-30%" y="-60%" width="160%" height="220%">
+              <feGaussianBlur stdDeviation="2.4" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#4a5566"/></marker>
+            <marker id="ahf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#58a6ff"/></marker>
+            <marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#9fd0ff"/></marker>
+            <marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#2f5560"/></marker>
+          </defs>
+          <g id="root"></g>
+        </svg>
+      </div>
+      <div class="hint">drag to pan · scroll to zoom · click a node to inspect · click a group header to collapse · <b style="color:var(--mut)">Fit</b> for the whole map</div>
+      <div id="tip"></div>
+    </div>
+    <div class="pane" id="right"></div>
+  </div>
+</div>
+
+<script id="data" type="application/json">
+{"meta":{"title":"ky · fix uppercase retry.methods","repos":{"ky":".cache/ky"},"branches":[{"repo":"ky","branch":"fix-methods (vs main, merge-base 4b6cd2f)"}],"overview":"A one-commit fix in <a href=\"https://github.com/sindresorhus/ky\">sindresorhus/ky</a> with a satisfying cause. <code>retry.methods</code> is documented in lowercase, and the retry check at <code>Ky.ts:321</code> lowercases the <em>request</em> method before comparing — but the caller's array was passed through untouched. So <code>retry: {methods: ['GET']}</code> silently disabled retries: <code>['GET'].includes('get')</code> is <code>false</code>, and the request threw on first failure instead of retrying. The fix normalises caller-supplied methods to lowercase during option normalisation, widens the type from <code>string[]</code> to <code>Array&lt;LiteralUnion&lt;HttpMethod, string&gt;&gt;</code> so known methods autocomplete without rejecting custom ones, and adds a test asserting 4 requests (1 + 3 retries) for <code>methods: ['GET']</code>.","bands":[{"k":"setup","label":"Request setup","groups":["gEntry","gNorm"]},{"k":"retry","label":"Retry decision","groups":["gRetry"]},{"k":"types","label":"Types","groups":["gTypes"]},{"k":"tests","label":"Tests","groups":["gTests"]}],"readingOrder":[{"id":"methodCheck","label":"the comparison","note":"the one line the fix exists to satisfy"},{"id":"normalizeRetry","label":"normalizeRetryOptions","note":"where the lowercasing was added"},{"id":"retryOptionsType","label":"RetryOptions.methods","note":"the type half of the change"},{"id":"testUppercase","label":"the regression test","note":"why the request count is the real assertion"},{"id":"testArrayMethods","label":"pre-existing coverage","note":"how the bug survived the suite"}],"stats":[{"k":"repo","v":"ky"},{"k":"files","v":"3"},{"k":"modified","v":"2"},{"k":"tests added","v":"1"},{"k":"lines","v":"+33 −1"}]},"files":[{"p":"source/utils/normalize.ts","r":"ky","s":"M","g":"Option normalisation","why":"Where the fix lives. normalizeRetryOptions already merged caller options over defaults; it now lowercases a caller-supplied methods array so the downstream comparison can match.","n":["normalizeRetry","defaultRetry","retryMethods"]},{"p":"source/types/retry.ts","r":"ky","s":"M","g":"Types","why":"Types the retry option bag. methods was string[], which gave no autocomplete and implied any string was equally expected; it is now a LiteralUnion of the known HTTP methods plus string.","n":["retryOptionsType"]},{"p":"test/retry.ts","r":"ky","s":"A","g":"Tests","why":"Adds the regression test. Counts requests against a server that always returns 408, so it fails if uppercase methods stop being retried.","n":["testUppercase","testArrayMethods"]},{"p":"source/core/Ky.ts","r":"ky","s":"S","g":"Retry decision","why":"Pre-existing. Normalises options in the constructor and owns the retry loop; line 321 is the comparison that the bug turned into a silent no-retry.","n":["kyCtor","retryLoop","calcRetryDelay","methodCheck","calcDelay"]},{"p":"source/index.ts","r":"ky","s":"S","g":"Entry point","why":"Pre-existing. The public ky() factory every request enters through.","n":["kyEntry"]},{"p":"source/types/common.ts","r":"ky","s":"S","g":"Types","why":"Pre-existing. LiteralUnion is the trick that keeps literal autocomplete while still accepting any string.","n":["literalUnion"]},{"p":"source/types/options.ts","r":"ky","s":"S","g":"Types","why":"Pre-existing. HttpMethod is the lowercase union the retry list is now checked against.","n":["httpMethod"]}],"groups":[{"id":"gEntry","t":"Entry point","n":["kyEntry","kyCtor"]},{"id":"gNorm","t":"Option normalisation","n":["normalizeRetry","defaultRetry","retryMethods"]},{"id":"gTypes","t":"Types","n":["retryOptionsType","literalUnion","httpMethod"]},{"id":"gRetry","t":"Retry decision","n":["retryLoop","calcRetryDelay","methodCheck","calcDelay"]},{"id":"gTests","t":"Tests","n":["testUppercase","testArrayMethods"]}],"edges":[["kyEntry","kyCtor","Ky.create(input, options)","call",1],["kyCtor","normalizeRetry","normalizeRetryOptions(options.retry)","call",1],["normalizeRetry","defaultRetry","spreads defaults","data",0],["defaultRetry","retryMethods","default list · lowercase","data",0],["retryOptionsType","normalizeRetry","types the input","data",0],["literalUnion","retryOptionsType","keeps autocomplete","data",0],["httpMethod","retryOptionsType","known methods","data",0],["kyCtor","retryLoop","wraps the request","call",1],["retryLoop","calcRetryDelay","on failure","call",1],["calcRetryDelay","methodCheck","is this method retriable?","call",1],["methodCheck","normalizeRetry","reads normalised methods","data",1],["calcRetryDelay","calcDelay","backoff + jitter","call",0],["retryLoop","retryLoop","recurses until limit","call",0],["testUppercase","normalizeRetry","verifies lowercasing","data",0],["testUppercase","methodCheck","exercises the comparison","data",0],["testArrayMethods","methodCheck","pre-existing coverage","data",0]],"nodes":[{"id":"kyEntry","x":40,"y":90,"label":"ky() factory","sub":"source/index.ts:34","kind":"entry","st":"S","file":"source/index.ts","repo":"ky","flow":1,"summary":"The public entry point. Every request starts here and is handed to <code>Ky.create</code> with the caller's options merged over any instance defaults.","segs":[{"n":"<code>createInstance</code> closes over instance defaults and returns a callable. <code>validateAndMerge</code> combines those defaults with the per-call options, so <code>retry</code> may arrive from either — which is why normalisation has to happen once, centrally, rather than at each call site.","l":[[10,"const createInstance = (defaults?: Partial<Options>): KyInstance => {"],[11,"\t// eslint-disable-next-line @typescript-eslint/promise-function-async"],[12,"\tconst ky: Partial<Mutable<KyInstance>> = (input: Input, options?: Options) => Ky.create(input, validateAndMerge(defaults, options));"]]},{"n":"The default export is a pre-built instance with no defaults, so <code>ky(url, {retry: …})</code> is the path the bug was reported on.","l":[[34,"const ky = createInstance();"],[35,""],[36,"export default ky;"]]}],"lines":"10–36"},{"id":"kyCtor","x":40,"y":190,"label":"Ky constructor","sub":"source/core/Ky.ts:207","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":2,"summary":"Builds the internal options object. Every option is normalised exactly once here, which is what makes <code>normalizeRetryOptions</code> the single correct place to fix the casing.","segs":[{"n":"Note line 204 alongside 207: the <em>request</em> method is normalised by <code>normalizeRequestMethod</code> (which uppercases known methods), while the <em>retry</em> list goes through <code>normalizeRetryOptions</code>. Two independent normalisations of the same vocabulary, in opposite directions — that mismatch is the root of the bug.","l":[[204,"\t\t\tmethod: normalizeRequestMethod(options.method ?? (this.#input as Request).method ?? 'GET'),"],[205,"\t\t\t// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing"],[206,"\t\t\tprefixUrl: String(options.prefixUrl || ''),"],[207,"\t\t\tretry: normalizeRetryOptions(options.retry),"],[208,"\t\t\tthrowHttpErrors: options.throwHttpErrors ?? true,"],[209,"\t\t\ttimeout: options.timeout ?? 10_000,"]]}],"lines":"204–209"},{"id":"normalizeRetry","x":350,"y":190,"label":"normalizeRetryOptions()","sub":"source/utils/normalize.ts:28","kind":"function","st":"M","file":"source/utils/normalize.ts","repo":"ky","flow":3,"summary":"Turns whatever the caller passed as <code>retry</code> — a number, a partial object, or nothing — into a fully-populated internal shape. <strong>This is where the fix lands:</strong> a caller-supplied <code>methods</code> array is now lowercased so the retry check can match it.","segs":[{"n":"<code>retry: 3</code> is shorthand for \"three attempts, defaults for everything else\". Note this early return skips the new lowercasing entirely — correctly, because there is no caller-supplied <code>methods</code> array on this path.","l":[[28,"export const normalizeRetryOptions = (retry: number | RetryOptions = {}): InternalRetryOptions => {"],[29,"\tif (typeof retry === 'number') {"],[30,"\t\treturn {"],[31,"\t\t\t...defaultRetryOptions,"],[32,"\t\t\tlimit: retry,"],[33,"\t\t};"],[34,"\t}"]]},{"n":"Shape validation for the two array options, throwing rather than coercing. Worth seeing before the fix: it establishes that by the time we reach the merge, <code>methods</code> is either absent or a real array — so <code>.map</code> below is safe without another guard.","l":[[36,"\tif (retry.methods && !Array.isArray(retry.methods)) {"],[37,"\t\tthrow new Error('retry.methods must be an array');"],[38,"\t}"],[39,""],[40,"\tif (retry.statusCodes && !Array.isArray(retry.statusCodes)) {"],[41,"\t\tthrow new Error('retry.statusCodes must be an array');"],[42,"\t}"]]},{"n":"Explicit <code>undefined</code> values are stripped before merging. Without this, <code>{methods: undefined}</code> would override the defaults with nothing and disable method filtering — so this filter is what makes the spread on the next lines safe.","l":[[44,"\tconst normalizedRetry = Object.fromEntries("],[45,"\t\tObject.entries(retry).filter(([, value]) => value !== undefined),"],[46,"\t) as RetryOptions;"]]},{"n":"The fix. Defaults first, caller options over them, then <code>methods</code> is recomputed last so it wins over the spread on line 50. <code>.map(toLowerCase)</code> makes <code>['GET']</code> into <code>['get']</code>, which is what <code>Ky.ts:321</code> compares against. The ternary matters: when the caller passed no methods, it falls back to <code>defaultRetryOptions.methods</code> rather than mapping over <code>undefined</code>.","l":[[48,"\treturn {"],[49,"\t\t...defaultRetryOptions,"],[50,"\t\t...normalizedRetry,"],[51,"\t\tmethods: normalizedRetry.methods"],[52,"\t\t\t? normalizedRetry.methods.map(method => method.toLowerCase())"],[53,"\t\t\t: defaultRetryOptions.methods,"],[54,"\t};"]]}],"lines":"28–54"},{"id":"defaultRetry","x":350,"y":290,"label":"defaultRetryOptions","sub":"source/utils/normalize.ts:16","kind":"config","st":"S","file":"source/utils/normalize.ts","repo":"ky","summary":"The baseline every retry config is merged onto.","segs":[{"n":"<code>methods: retryMethods</code> is already lowercase, which is why the default path never hit the bug — only a caller-supplied list did. Note the defaults deliberately exclude <code>post</code> and <code>patch</code>: retrying a non-idempotent request could duplicate a write.","l":[[16,"const defaultRetryOptions: InternalRetryOptions = {"],[17,"\tlimit: 2,"],[18,"\tmethods: retryMethods,"],[19,"\tstatusCodes: retryStatusCodes,"],[20,"\tafterStatusCodes: retryAfterStatusCodes,"],[21,"\tmaxRetryAfter: Number.POSITIVE_INFINITY,"],[22,"\tbackoffLimit: Number.POSITIVE_INFINITY,"],[23,"\tdelay: attemptCount => 0.3 * (2 ** (attemptCount - 1)) * 1000,"],[24,"\tjitter: undefined,"],[25,"\tretryOnTimeout: false,"],[26,"};"]]}],"lines":"16–26"},{"id":"retryMethods","x":350,"y":390,"label":"retryMethods","sub":"source/utils/normalize.ts:8","kind":"config","st":"S","file":"source/utils/normalize.ts","repo":"ky","summary":"The lowercase list of methods considered safe to retry — the casing convention the whole comparison depends on.","segs":[{"n":"All lowercase. Since <code>Ky.ts:321</code> lowercases the incoming request method before the <code>includes</code> check, lowercase is the internal canonical form; the fix simply makes caller input conform to it.","l":[[8,"const retryMethods = ['get', 'put', 'head', 'delete', 'options', 'trace'];"],[9,""],[10,"const retryStatusCodes = [408, 413, 429, 500, 502, 503, 504];"],[11,""],[12,"const retryAfterStatusCodes = [413, 429, 503];"]]}],"lines":"8–12"},{"id":"retryOptionsType","x":40,"y":420,"label":"RetryOptions.methods","sub":"source/types/retry.ts:29","kind":"type","st":"M","file":"source/types/retry.ts","repo":"ky","summary":"The typing half of the change: <code>string[]</code> became <code>Array&lt;LiteralUnion&lt;HttpMethod, string&gt;&gt;</code>, so editors suggest the six known methods while still accepting any custom verb.","segs":[{"n":"Both imports are new in this commit — the type change is what pulled them in.","l":[[1,"import type {LiteralUnion} from './common.js';"],[2,"import type {HttpMethod} from './options.js';"]]},{"n":"Line 29 is the change (previously <code>methods?: string[]</code>). The doc comment above it already documented lowercase defaults, so the type now nudges callers toward the same casing the runtime expects. It is a hint, not enforcement: <code>LiteralUnion</code> still permits <code>'GET'</code>, which is exactly why the runtime fix is the load-bearing one.","l":[[24,"\t/**"],[25,"\tThe HTTP methods allowed to retry."],[26,""],[27,"\t@default ['get', 'put', 'head', 'delete', 'options', 'trace']"],[28,"\t*/"],[29,"\tmethods?: Array<LiteralUnion<HttpMethod, string>>;"]]}],"lines":"1–29"},{"id":"literalUnion","x":40,"y":520,"label":"LiteralUnion","sub":"source/types/common.ts:6","kind":"type","st":"S","file":"source/types/common.ts","repo":"ky","summary":"The idiom that gives literal autocomplete without closing the type. A plain union would reject custom methods; a plain <code>string</code> would suggest nothing.","segs":[{"n":"<code>BaseType &amp; {_?: never}</code> is the trick: intersecting with an almost-empty object keeps TypeScript from collapsing the union down to <code>string</code>, so the literal members survive for autocomplete while any string still assigns.","l":[[6,"export type LiteralUnion<LiteralType extends BaseType, BaseType extends Primitive> ="],[7,"\t| LiteralType"],[8,"\t| (BaseType & {_?: never});"]]}],"lines":"6–8"},{"id":"httpMethod","x":40,"y":620,"label":"HttpMethod","sub":"source/types/options.ts:11","kind":"type","st":"S","file":"source/types/options.ts","repo":"ky","summary":"The canonical lowercase union of methods ky knows about.","segs":[{"n":"Lowercase, matching <code>requestMethods</code> in <code>core/constants.ts</code> (which has a type-level test asserting the two stay in sync). This is the vocabulary the retry list is now typed against.","l":[[11,"export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'head' | 'delete';"]]}],"lines":"11–11"},{"id":"retryLoop","x":660,"y":90,"label":"#retry()","sub":"source/core/Ky.ts:387","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":4,"summary":"The retry loop: run the request, and on failure ask <code>#calculateRetryDelay</code> how long to wait — or let the error through.","segs":[{"n":"The control flow that makes the bug invisible: <code>#calculateRetryDelay</code> either returns a delay or <b>throws the original error</b>. So a method that fails the retriability check surfaces as the plain request error with no indication that a retry was skipped — which is why <code>methods: ['GET']</code> looked like \"retries just don't work\" rather than a config problem.","l":[[387,"\tasync #retry<T extends (...arguments_: any) => Promise<any>>(function_: T): Promise<ReturnType<T> | Response | void> {"],[388,"\t\ttry {"],[389,"\t\t\treturn await function_();"],[390,"\t\t} catch (error) {"],[391,"\t\t\tconst ms = Math.min(await this.#calculateRetryDelay(error), maxSafeTimeout);"],[392,"\t\t\tif (this.#retryCount < 1) {"],[393,"\t\t\t\tthrow error;"],[394,"\t\t\t}"]]}],"lines":"387–394"},{"id":"calcRetryDelay","x":660,"y":190,"label":"#calculateRetryDelay()","sub":"source/core/Ky.ts:305","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":5,"summary":"Decides whether this failure is retriable at all, and if so how long to wait. The order of its checks is the retry policy.","segs":[{"n":"Attempt count first (cheapest bail-out), then non-<code>Error</code> throws are wrapped for consistency. The <code>ForceRetryError</code> branch deliberately returns <b>before</b> the method check — an <code>afterResponse</code> hook that forces a retry bypasses method filtering by design, so that path was never affected by this bug.","l":[[305,"\tasync #calculateRetryDelay(error: unknown) {"],[306,"\t\tthis.#retryCount++;"],[307,""],[308,"\t\tif (this.#retryCount > this.#options.retry.limit) {"],[309,"\t\t\tthrow error;"],[310,"\t\t}"],[311,""],[312,"\t\t// Wrap non-Error throws to ensure consistent error handling"],[313,"\t\tconst errorObject = error instanceof Error ? error : new NonError(error);"],[314,""],[315,"\t\t// Handle forced retry from afterResponse hook - skip method check and shouldRetry"],[316,"\t\tif (errorObject instanceof ForceRetryError) {"],[317,"\t\t\treturn errorObject.customDelay ?? this.#calculateDelay();"],[318,"\t\t}"]]},{"n":"The comparison at the heart of the fix, shown in context: reached only for non-forced retries, and throwing here is what silently cancelled retries for uppercase methods.","l":[[320,"\t\t// Check if method is retriable for non-forced retries"],[321,"\t\tif (!this.#options.retry.methods.includes(this.request.method.toLowerCase())) {"],[322,"\t\t\tthrow error;"],[323,"\t\t}"]]}],"lines":"305–323"},{"id":"methodCheck","x":660,"y":290,"label":"method retriability check","sub":"source/core/Ky.ts:321","kind":"gate","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":6,"summary":"The single line the whole change exists to satisfy. It lowercases the request's method but takes the allow-list as-is — so the two sides only meet if the allow-list is already lowercase.","segs":[{"n":"<code>this.request.method</code> is uppercase by then (<code>normalizeRequestMethod</code> uppercases known methods at construction), so <code>.toLowerCase()</code> yields <code>'get'</code>. Before the fix the allow-list was the caller's <code>['GET']</code>, so <code>includes('get')</code> was <code>false</code> and line 322 threw. Both sides are now lowercase. Fixing it here instead — by lowercasing the list at comparison time — would have re-run the work on every failure and left <code>options.retry.methods</code> inconsistent for anything else reading it.","l":[[321,"\t\tif (!this.#options.retry.methods.includes(this.request.method.toLowerCase())) {"],[322,"\t\t\tthrow error;"],[323,"\t\t}"]]}],"lines":"321–323"},{"id":"calcDelay","x":660,"y":390,"label":"#calculateDelay()","sub":"source/core/Ky.ts:286","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","summary":"Computes the backoff for an attempt that has already been judged retriable. Unrelated to the fix, included because it is the other half of what the retry decision returns.","segs":[{"n":"Exponential backoff, optional jitter (boolean or custom function), clamped by <code>backoffLimit</code>. Lines 295–297 fall back to the unjittered delay if a custom jitter function returns something non-finite or negative — a small piece of defensiveness against user-supplied callbacks.","l":[[286,"\t#calculateDelay(): number {"],[287,"\t\tconst retryDelay = this.#options.retry.delay(this.#retryCount);"],[288,""],[289,"\t\tlet jitteredDelay = retryDelay;"],[290,"\t\tif (this.#options.retry.jitter === true) {"],[291,"\t\t\tjitteredDelay = Math.random() * retryDelay;"],[292,"\t\t} else if (typeof this.#options.retry.jitter === 'function') {"],[293,"\t\t\tjitteredDelay = this.#options.retry.jitter(retryDelay);"],[294,""],[295,"\t\t\tif (!Number.isFinite(jitteredDelay) || jitteredDelay < 0) {"],[296,"\t\t\t\tjitteredDelay = retryDelay;"],[297,"\t\t\t}"],[298,"\t\t}"],[299,""],[300,"\t\t// Handle undefined backoffLimit by treating it as no limit (Infinity)"],[301,"\t\tconst backoffLimit = this.#options.retry.backoffLimit ?? Number.POSITIVE_INFINITY;"],[302,"\t\treturn Math.min(backoffLimit, jitteredDelay);"]]}],"lines":"286–302"},{"id":"testUppercase","x":970,"y":140,"label":"normalizes uppercase methods","sub":"test/retry.ts:506","kind":"test","st":"A","file":"test/retry.ts","repo":"ky","summary":"The regression test. Serves 408 forever and counts requests, so it fails the moment uppercase methods stop being retried.","segs":[{"n":"A local server that always answers 408 (Request Timeout) and increments a counter. 408 is in the default <code>retryStatusCodes</code>, so the status is never the reason a retry is skipped — isolating the method check as the only variable.","l":[[506,"test('normalizes uppercase methods to lowercase', async t => {"],[507,"\tlet requestCount = 0;"],[508,""],[509,"\tconst server = await createHttpTestServer();"],[510,"\tserver.get('/', async (_request, response) => {"],[511,"\t\trequestCount++;"],[512,"\t\tresponse.sendStatus(408);"],[513,"\t});"]]},{"n":"The exercise: <code>limit: 3</code> with <code>methods: ['GET']</code> — uppercase, which is precisely what used to fail. <code>throwsAsync</code> is expected even when the fix works, because all four attempts return 408 and ky eventually throws; the assertion that actually detects the bug is the request count.","l":[[515,"\tawait t.throwsAsync("],[516,"\t\tky(server.url, {"],[517,"\t\t\tretry: {"],[518,"\t\t\t\tlimit: 3,"],[519,"\t\t\t\tmethods: ['GET'],"],[520,"\t\t\t},"],[521,"\t\t}).text(),"],[522,"\t\t{"],[523,"\t\t\tmessage: /Request Timeout/,"],[524,"\t\t},"],[525,"\t);"]]},{"n":"<code>requestCount === 4</code> is the real assertion: one initial request plus three retries. Before the fix this was <b>1</b> — the request threw immediately without retrying. A count assertion rather than an error-message assertion is what makes this test able to see the difference.","l":[[527,"\tt.is(requestCount, 4);"],[528,""],[529,"\tawait server.close();"],[530,"});"]]}],"lines":"506–530"},{"id":"testArrayMethods","x":970,"y":260,"label":"retry on 408 with methods array","sub":"test/retry.ts:480","kind":"test","st":"S","file":"test/retry.ts","repo":"ky","summary":"Pre-existing coverage, included to show why the bug survived: the suite already tested a caller-supplied methods array — but in lowercase, so it passed throughout.","segs":[{"n":"Same shape as the new test, and the reason casing slipped through: this asserts that a caller-supplied array is honoured, which it was — as long as it was already lowercase. The gap was never \"is <code>methods</code> respected\" but \"is it normalised\", and the new test is the one that asks that question.","l":[[480,"test('does retry on 408 with methods provided as array', async t => {"],[481,"\tlet requestCount = 0;"],[482,""],[483,"\tconst server = await createHttpTestServer();"],[484,"\tserver.get('/', async (_request, response) => {"]]}],"lines":"480–484"}],"legend":{"status":[["A","Added for this feature","added"],["M","Modified for this feature","mod"],["U","Uncommitted / untracked","unc"],["S","Pre-existing supporting code","sup"],["I","Infrastructure / external service","infra"]],"edges":[["","calls","f"],["d","HTTP request","d"],["t","data flow","t"],["db","store operation","db"],["inf","inferred","inf"]]}}
+</script>
+
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+DATA.nodes = DATA.nodes.filter(n => n.id !== "__SENTINEL__");
+
+const NW = 186, NH = 62, STORE_H = 74;
+const N = new Map(DATA.nodes.map(n => [n.id, n]));
+DATA.nodes.forEach(n => { n.w = NW; n.h = (n.kind === "store" ? STORE_H : NH); });
+
+// Re-space the columns. Authored x values left only a ~44px gutter between columns, which is
+// narrower than most edge labels — over half of them had nowhere to sit and were dropped.
+// Snapping the distinct x values onto a wider grid gives every label room in the gutter.
+const COL_GAP = 310;
+(() => {
+  const cols = [...new Set(DATA.nodes.filter(n => n.x > -9000).map(n => n.x))].sort((a, b) => a - b);
+  const map = new Map(cols.map((x, i) => [x, 40 + i * COL_GAP]));
+  DATA.nodes.forEach(n => { if (map.has(n.x)) n.x = map.get(n.x); });
+})();
+
+// group membership
+const GOF = new Map();
+DATA.groups.forEach(g => g.n.forEach(id => GOF.set(id, g.id)));
+const G = new Map(DATA.groups.map(g => [g.id, g]));
+
+// edges normalised
+const EDGES = DATA.edges.map((e, i) => ({
+  i, from: e[0], to: e[1], label: e[2], kind: e[3], flow: !!e[4], inferred: e[5] === "inf"
+})).filter(e => N.has(e.from) && N.has(e.to));
+
+const ST = {
+  A: { c: "var(--added)", t: "Added" },
+  M: { c: "var(--mod)", t: "Modified" },
+  U: { c: "var(--unc)", t: "Uncommitted" },
+  S: { c: "var(--sup)", t: "Supporting" },
+  I: { c: "var(--infra)", t: "Infrastructure" }
+};
+
+const state = {
+  sel: null, filter: "all", flow: false, notes: true,
+  collapsed: new Set(), crumbs: [], hi: null,
+  z: 1, tx: 0, ty: 0
+};
+
+/* ---------------- syntax highlight ---------------- */
+const KW = new Set(("const let var function return if else for while of in await async new try catch finally throw typeof instanceof class extends export import from as interface type enum implements public private readonly static void null undefined true false this delete break continue switch case default do yield satisfies keyof").split(" "));
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function hl(src){
+  let out = "", i = 0;
+  const push = (cls, txt) => { out += cls ? `<span class="tk-${cls}">${esc(txt)}</span>` : esc(txt); };
+  while (i < src.length){
+    const ch = src[i];
+    // line comment
+    if (ch === "/" && src[i+1] === "/"){ push("c", src.slice(i)); break; }
+    if (ch === "/" && src[i+1] === "*"){ const e = src.indexOf("*/", i+2); const end = e < 0 ? src.length : e+2; push("c", src.slice(i,end)); i = end; continue; }
+    // strings & templates
+    if (ch === '"' || ch === "'" || ch === "`"){
+      let j = i+1;
+      while (j < src.length){ if (src[j] === "\\"){ j += 2; continue; } if (src[j] === ch) { j++; break; } j++; }
+      push("s", src.slice(i, j)); i = j; continue;
+    }
+    // numbers
+    if (/[0-9]/.test(ch) && !/[A-Za-z0-9_$]/.test(src[i-1] || "")){
+      let j = i; while (j < src.length && /[0-9_a-fA-FxX.]/.test(src[j])) j++;
+      push("n", src.slice(i,j)); i = j; continue;
+    }
+    // identifiers
+    if (/[A-Za-z_$]/.test(ch)){
+      let j = i; while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+      const w = src.slice(i,j);
+      if (KW.has(w)) push("k", w);
+      else if (src[j] === "(") push("f", w);
+      else if (/^[A-Z]/.test(w)) push("t", w);
+      else push(null, w);
+      i = j; continue;
+    }
+    push(null, ch); i++;
+  }
+  return out;
+}
+
+/* ---------------- geometry ---------------- */
+function anchorOf(id){
+  const gid = GOF.get(id);
+  if (gid && state.collapsed.has(gid)) return { ...groupBox(gid), gid };
+  const n = N.get(id);
+  return { x: n.x, y: n.y, w: n.w, h: n.h };
+}
+function groupBox(gid){
+  const g = G.get(gid);
+  const ns = g.n.map(id => N.get(id)).filter(Boolean);
+  if (!ns.length) return { x: 0, y: 0, w: 0, h: 0 };
+  const x1 = Math.min(...ns.map(n => n.x)) - 14;
+  const y1 = Math.min(...ns.map(n => n.y)) - 30;
+  const x2 = Math.max(...ns.map(n => n.x + n.w)) + 14;
+  const y2 = Math.max(...ns.map(n => n.y + n.h)) + 14;
+  if (state.collapsed.has(gid)) return { x: x1, y: y1, w: x2-x1, h: 60 };
+  return { x: x1, y: y1, w: x2-x1, h: y2-y1 };
+}
+function visible(id){
+  const gid = GOF.get(id);
+  return !(gid && state.collapsed.has(gid));
+}
+function path(a, b){
+  const sx = a.x + a.w, sy = a.y + a.h/2, ex = b.x, ey = b.y + b.h/2;
+  if (b.x > a.x + a.w - 10){
+    const dx = Math.max(38, (ex - sx) * 0.48);
+    return { d:`M${sx},${sy} C${sx+dx},${sy} ${ex-dx},${ey} ${ex},${ey}`, mx:(sx+ex)/2, my:(sy+ey)/2 - 7 };
+  }
+  // backward / vertical: route around the right side
+  const sx2 = a.x + a.w/2, sy2 = a.y + a.h, ex2 = b.x + b.w/2, ey2 = b.y;
+  if (Math.abs(sx2-ex2) < 6 && b.y > a.y){
+    return { d:`M${sx2},${sy2} C${sx2},${sy2+30} ${ex2},${ey2-30} ${ex2},${ey2}`, mx:sx2, my:(sy2+ey2)/2 - 5 };
+  }
+  const bx = Math.max(a.x + a.w, b.x + b.w) + 46;
+  return { d:`M${a.x+a.w},${a.y+a.h/2} C${bx},${a.y+a.h/2} ${bx},${b.y+b.h/2} ${b.x+b.w},${b.y+b.h/2}`, mx:bx-8, my:(a.y+b.y)/2, back:true };
+}
+
+/* ---------------- filters ---------------- */
+// Status filters are universal. Subsystem filters come from meta.bands in the spec —
+// e.g. {"k":"write","label":"Write path","groups":["gOrch","gWrite"]} — so a project only
+// ever gets controls that mean something for it. Omit meta.bands and you get status only.
+const BAND = {};
+const FILTERS = (() => {
+  const base = [["all","All"],["changed","Changed"],["A","Added"],["M","Modified"],["U","Uncommitted"]];
+  const bands = (DATA.meta && DATA.meta.bands) || [];
+  for (const b of bands) BAND[b.k] = b.groups || [];
+  return [...base, ...bands.map(b => [b.k, b.label]), ["sup","Supporting"]];
+})();
+function passes(n){
+  const f = state.filter;
+  if (f === "all") return true;
+  if (f === "changed") return n.st === "A" || n.st === "M" || n.st === "U" || n.u;
+  if (f === "A" || f === "M" || f === "U") return n.st === f || (f === "U" && !!n.u);
+  if (f === "sup") return n.st === "S" || n.st === "I";
+  const gs = BAND[f]; return gs ? gs.includes(GOF.get(n.id)) : true;
+}
+function inFlow(n){ return !!n.flow; }
+
+/* ---------------- render graph ---------------- */
+const svg = document.getElementById("svg"), root = document.getElementById("root");
+function render(){
+  const parts = [];
+  // groups
+  DATA.groups.forEach(g => {
+    const b = groupBox(g.id);
+    const col = state.collapsed.has(g.id);
+    const anyPass = g.n.some(id => N.has(id) && passes(N.get(id)));
+    parts.push(`<g opacity="${anyPass?1:.35}">
+      <rect class="gbox" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="12"></rect>
+      <text class="glab" x="${b.x+13}" y="${b.y+18}">${esc(g.t)}</text>
+      <text class="gcnt" x="${b.x+b.w-46}" y="${b.y+18}" text-anchor="end">${g.n.length}</text>
+      <rect class="gtog" data-g="${g.id}" x="${b.x+b.w-38}" y="${b.y+7}" width="26" height="15"></rect>
+      <text class="gtogl" data-g="${g.id}" x="${b.x+b.w-25}" y="${b.y+18}">${col?"+":"–"}</text>
+      ${col?`<text class="ns" x="${b.x+13}" y="${b.y+44}">${g.n.length} nodes collapsed — click + to expand</text>`:""}
+    </g>`);
+  });
+  // edges
+  const seen = new Set();
+  EDGES.forEach(e => {
+    const a = anchorOf(e.from), b = anchorOf(e.to);
+    if (a.gid && a.gid === b.gid) return;
+    const key = `${a.gid||e.from}>${b.gid||e.to}>${e.label}`;
+    if (seen.has(key)) return; seen.add(key);
+    const p = path(a,b);
+    const nf = N.get(e.from), nt = N.get(e.to);
+    let cls = "edge " + (e.inferred ? "inf" : e.kind === "data" ? "data" : e.kind === "http" ? "http" : e.kind === "db" ? "db" : "");
+    let mk = e.kind === "db" ? "ahd" : "ah";
+    const dimByFilter = !(passes(nf) && passes(nt));
+    const dimByFlow = state.flow && !(e.flow);
+    const isHi = state.hi && (e.from === state.hi || e.to === state.hi);
+    if (e.flow && state.flow){ cls += " flow"; mk = "ahf"; }
+    if (isHi){ cls += " hi"; mk = "ahh"; }
+    if ((dimByFilter || dimByFlow) && !isHi) cls += " dim";
+    // Label text is not emitted here: nodes paint after edges, so an inline label got
+    // overpainted by any node box it crossed. placeEdgeLabels() draws them in a top
+    // layer, measured and positioned at a point on the curve that is actually free.
+    const labText = e.label ? e.label + (e.inferred ? " ⟨inf⟩" : "") : "";
+    // A <title> on every path: in saturated areas a few labels have no clear room and are
+    // dropped, so hovering the arrow is the guaranteed way to read any relationship.
+    const tip = `${nf.label} → ${nt.label}${labText ? ` — ${labText}` : ""}`;
+    parts.push(`<path class="${cls}" d="${p.d}" marker-end="url(#${mk})"${labText ? ` data-lab="${esc(labText)}"` : ""}><title>${esc(tip)}</title></path>`);
+  });
+  // nodes
+  DATA.nodes.forEach(n => {
+    if (!visible(n.id)) return;
+    const s = ST[n.st] || ST.S;
+    let cls = "nd";
+    if (state.sel === n.id) cls += " sel";
+    if (!passes(n)) cls += " dim";
+    else if (state.flow && !inFlow(n)) cls += " dim2";
+    const stroke = state.sel === n.id ? "#9fd0ff" : (n.kind === "store" ? "var(--store)" : "var(--line2)");
+    parts.push(`<g class="${cls}" data-n="${n.id}" data-kind="${esc(n.kind || "")}">
+      <rect class="nb" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="7" stroke="${stroke}"></rect>
+      <rect class="nbar" x="${n.x}" y="${n.y}" width="3.5" height="${n.h}" fill="${s.c}" rx="2"></rect>
+      <text class="nl" x="${n.x+12}" y="${n.y+22}">${esc(clip(n.label,23))}</text>
+      <text class="ns" x="${n.x+12}" y="${n.y+38}">${esc(clip(n.sub,25))}</text>
+      <text class="nk" x="${n.x+12}" y="${n.y+53}" fill="${s.c}">${esc((n.kind||"").toUpperCase())}${n.u?" · UNCOMMITTED":""}</text>
+      ${n.flow?`<circle cx="${n.x+n.w-15}" cy="${n.y+16}" r="8.5" fill="${state.flow?"var(--flow)":"#2a3546"}"></circle>
+        <text class="flowrank" x="${n.x+n.w-15}" y="${n.y+19}" text-anchor="middle" fill="${state.flow?"#08111c":"#8fb6e0"}">${n.flow}</text>`:""}
+    </g>`);
+  });
+  parts.push(`<g id="elabels"></g>`); // last child → paints above the nodes
+  root.innerHTML = parts.join("");
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+  placeEdgeLabels();
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function overlaps(a, b){
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+// Measure each label, then walk candidate points along its own curve until one lands clear
+// of every node box and already-placed label. Guessing the plate width from character count
+// (the previous approach) mis-sized it, and placing blindly at the midpoint put labels under nodes.
+function placeEdgeLabels(){
+  const layer = document.getElementById("elabels");
+  if (!layer) return;
+
+  const obstacles = DATA.nodes.filter(n => visible(n.id)).map(n => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+  DATA.groups.forEach(g => { if (state.collapsed.has(g.id)) obstacles.push(groupBox(g.id)); });
+
+  const placed = [];
+  // Dense sweep along the curve, each point also tried at small vertical offsets. The dense
+  // columns (loaders → write → stores) leave only narrow gaps, so a coarse sweep found none.
+  const FRACS = [0.5, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62, 0.34, 0.66, 0.3, 0.7, 0.26, 0.74, 0.22, 0.78, 0.18, 0.82];
+  const DYS = [0, -15, 15, -30, 30, -45, 45];
+  const H = 13;
+
+  root.querySelectorAll("path.edge[data-lab]").forEach(p => {
+    const full = p.getAttribute("data-lab");
+    const isDim = p.classList.contains("dim");
+    const isFlow = p.classList.contains("flow");
+    const L = p.getTotalLength();
+
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("class", "el" + (isFlow ? " flow" : "") + (isDim ? " dim" : ""));
+    t.setAttribute("text-anchor", "middle");
+    layer.appendChild(t);
+
+    // Try the full label; if it cannot be placed anywhere, retry with the short form
+    // rather than dropping the relationship. The full text is always in the inspector.
+    let spot = null, used = null, W = 0;
+    for (const variant of [full, shortLabel(full)]){
+      t.textContent = variant;
+      W = t.getBBox().width + 9; // measured, so the plate can never be too small for the text
+      for (const dy of DYS){
+        for (const f of FRACS){
+          const pt = p.getPointAtLength(L * f);
+          const box = { x: pt.x - W/2, y: pt.y - H/2 + dy, w: W, h: H };
+          if (!obstacles.some(o => overlaps(box, o)) && !placed.some(q => overlaps(box, q))){
+            spot = { pt: { x: pt.x, y: pt.y + dy }, box }; break;
+          }
+        }
+        if (spot) break;
+      }
+      if (spot){ used = variant; break; }
+      if (variant === shortLabel(full)) break; // both forms exhausted
+    }
+    if (!spot){ t.remove(); return; } // genuinely no room — drop rather than print an illegible smear
+
+    t.textContent = used;
+    if (used !== full) t.setAttribute("data-full", full); // hover shows the full text
+    placed.push(spot.box);
+    t.setAttribute("x", spot.pt.x);
+    t.setAttribute("y", spot.pt.y + 3.4);
+    const r = document.createElementNS(SVGNS, "rect");
+    r.setAttribute("class", "eb" + (isDim ? " dim" : ""));
+    r.setAttribute("x", spot.box.x); r.setAttribute("y", spot.box.y);
+    r.setAttribute("width", W); r.setAttribute("height", H); r.setAttribute("rx", 3);
+    layer.insertBefore(r, t);
+    if (used !== full){
+      const tip = document.createElementNS(SVGNS, "title");
+      tip.textContent = full;
+      t.appendChild(tip); r.appendChild(tip.cloneNode(true));
+    }
+  });
+}
+
+// Shortest meaningful form: prefer the shortest "·"-separated clause, then the leading words.
+function shortLabel(s){
+  const bare = s.replace(" ⟨inf⟩", "");
+  const parts = bare.split(" · ").map(x => x.trim()).filter(Boolean);
+  let out = parts.length > 1 ? parts.reduce((a, b) => (b.length < a.length ? b : a)) : bare;
+  out = out.replace(/\s*\([^)]*\)\s*/g, " ").trim(); // drop parenthetical qualifiers
+  if (out.length > 15){
+    const words = out.split(/\s+/);
+    out = words[0].length <= 15 ? words[0] : out.slice(0, 14) + "…";
+  }
+  return out || bare.slice(0, 14) + "…";
+}
+function clip(s,n){ s = s||""; return s.length > n ? s.slice(0,n-1)+"…" : s; }
+
+/* ---------------- pan / zoom ----------------
+   The viewBox tracks the pane's pixel size so one viewBox unit == one CSS pixel.
+   With a fixed oversized viewBox, preserveAspectRatio pre-scaled everything to
+   ~0.32 in a narrow pane and no zoom level could make node text legible. */
+let VW = 1200, VH = 800;
+function syncViewBox(){
+  const r = svg.getBoundingClientRect();
+  VW = Math.max(320, Math.round(r.width));
+  VH = Math.max(240, Math.round(r.height));
+  svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+}
+let drag = null;
+svg.addEventListener("mousedown", e => {
+  if (e.target.closest(".nd") || e.target.closest(".gtog") || e.target.classList.contains("gtogl")) return;
+  drag = { x: e.clientX, y: e.clientY, tx: state.tx, ty: state.ty };
+  svg.classList.add("drag");
+});
+window.addEventListener("mousemove", e => {
+  if (!drag) return;
+  const k = VW / svg.clientWidth;
+  state.tx = drag.tx + (e.clientX - drag.x) * k;
+  state.ty = drag.ty + (e.clientY - drag.y) * k;
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+});
+window.addEventListener("mouseup", () => { drag = null; svg.classList.remove("drag"); });
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const k = VW / svg.clientWidth;
+  const mx = e.offsetX * k, my = e.offsetY * k;
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const nz = Math.min(3.2, Math.max(0.18, state.z * f));
+  state.tx = mx - (mx - state.tx) * (nz / state.z);
+  state.ty = my - (my - state.ty) * (nz / state.z);
+  state.z = nz;
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+}, { passive: false });
+
+function bbox(ids){
+  const ns = (ids || DATA.nodes.map(n=>n.id)).map(i=>N.get(i)).filter(n=>n && visible(n.id));
+  if (!ns.length) return null;
+  return {
+    x1: Math.min(...ns.map(n=>n.x)) - 60, y1: Math.min(...ns.map(n=>n.y)) - 60,
+    x2: Math.max(...ns.map(n=>n.x+n.w)) + 60, y2: Math.max(...ns.map(n=>n.y+n.h)) + 60
+  };
+}
+function fitTo(ids, minZoom, align){
+  syncViewBox();
+  const b = bbox(ids); if (!b) return;
+  let z = Math.min(VW/(b.x2-b.x1), VH/(b.y2-b.y1), 2.6);
+  if (minZoom) z = Math.max(z, minZoom);
+  state.z = z;
+  const sw = (b.x2-b.x1)*z, sh = (b.y2-b.y1)*z, M = 24;
+  // Centre only when the region actually fits; otherwise anchor to the start edge so
+  // the beginning of the flow is on screen instead of clipped off both sides.
+  state.tx = (align === "start" || sw > VW) ? M - b.x1*z : (VW - sw)/2 - b.x1*z;
+  state.ty = (align === "start" || sh > VH) ? M - b.y1*z : (VH - sh)/2 - b.y1*z;
+  render();
+}
+function centerOn(id){
+  syncViewBox();
+  const n = N.get(id); if (!n) return;
+  const z = Math.max(state.z, 0.9); // 0.9 is now 90% of actual size, so labels stay readable
+  state.z = z;
+  state.tx = VW/2 - (n.x + n.w/2) * z;
+  state.ty = VH/2 - (n.y + n.h/2) * z;
+  render();
+}
+// Opening view: the first steps of the spine at a legible scale. Fitting the whole canvas
+// (2000x1460) into a ~660px pane gives z≈0.33, where 11px labels render at ~4px — a blur.
+// "Fit" still gives the true overview on demand.
+function focusFlow(){
+  const start = DATA.nodes.filter(n => n.flow && n.flow <= 5).map(n => n.id);
+  fitTo(start.length ? start : null, 0.78, "start");
+}
+let rzT = null;
+window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { syncViewBox(); render(); }, 120); });
+
+/* ---------------- interactions ---------------- */
+svg.addEventListener("click", e => {
+  const tg = e.target.closest("[data-g]");
+  if (tg){ const g = tg.getAttribute("data-g"); state.collapsed.has(g) ? state.collapsed.delete(g) : state.collapsed.add(g); render(); return; }
+  const nd = e.target.closest(".nd");
+  if (nd){ select(nd.getAttribute("data-n"), true); return; }
+});
+const tip = document.getElementById("tip");
+svg.addEventListener("mousemove", e => {
+  const nd = e.target.closest(".nd");
+  if (!nd){ tip.classList.remove("on"); state.hi = null; return; }
+  const n = N.get(nd.getAttribute("data-n"));
+  if (!n) return;
+  tip.innerHTML = `<b>${esc(n.label)}</b>${n.summary||""}<div class="p">${esc(n.repo)} · ${esc(n.file)}${n.lines?" : "+esc(n.lines):""}</div>`;
+  const r = svg.getBoundingClientRect();
+  tip.style.left = Math.min(e.clientX - r.left + 16, r.width - 340) + "px";
+  tip.style.top = Math.min(e.clientY - r.top + 14, r.height - 130) + "px";
+  tip.classList.add("on");
+});
+svg.addEventListener("mouseleave", () => tip.classList.remove("on"));
+
+function select(id, pushCrumb){
+  if (!N.has(id)) return;
+  state.sel = id; state.hi = id;
+  if (pushCrumb){
+    const i = state.crumbs.indexOf(id);
+    if (i >= 0) state.crumbs = state.crumbs.slice(0, i+1);
+    else state.crumbs.push(id);
+    if (state.crumbs.length > 9) state.crumbs.shift();
+  }
+  const gid = GOF.get(id);
+  if (gid && state.collapsed.has(gid)) state.collapsed.delete(gid);
+  render(); centerOn(id); renderInspector(); renderLeft();
+  document.getElementById("right").scrollTop = 0;
+}
+
+/* ---------------- left pane ---------------- */
+function renderLeft(){
+  const groups = {};
+  DATA.files.forEach(f => { (groups[f.g] = groups[f.g] || []).push(f); });
+  let h = "";
+  h += `<div class="sec" id="secFiles"><div class="sech">Changed files<span class="cnt">${DATA.files.length}</span><span class="tw">▼</span></div><div class="secb">`;
+  Object.entries(groups).forEach(([g, fs]) => {
+    h += `<div class="grp"><span>${esc(g)}</span></div>`;
+    fs.forEach(f => {
+      const act = f.n && f.n.includes(state.sel);
+      h += `<div class="f ${act?"act":""}" data-f="${esc(f.p)}|${esc(f.r)}" title="${esc(f.why)}">
+        <span class="st ${f.s}">${f.s}</span>
+        <span class="fp">${esc(f.p.replace(/^src\//,""))}</span>
+        ${f.u?`<span class="fu" title="has uncommitted edits">◐</span>`:""}
+      </div>`;
+    });
+  });
+  h += `</div></div>`;
+
+  h += `<div class="sec"><div class="sech">Legend<span class="tw">▼</span></div><div class="legend">`;
+  DATA.legend.status.forEach(([k,t,c]) => { h += `<div class="lg"><span class="sw" style="background:var(--${c})"></span>${esc(t)}</div>`; });
+  h += `<div class="lg" style="margin-top:4px"><span class="ln f"></span>primary feature flow</div>`;
+  h += `<div class="lg"><span class="ln"></span>function call</div>`;
+  h += `<div class="lg"><span class="ln d"></span>HTTP / AMQP request</div>`;
+  h += `<div class="lg"><span class="ln t"></span>data flow · reads / provides</div>`;
+  h += `<div class="lg"><span class="ln" style="border-color:#2f5560;border-top-width:3px"></span>store operation</div>`;
+  h += `<div class="lg"><span class="ln d" style="border-color:#4a4258"></span>inferred ⟨inf⟩</div>`;
+  h += `<div class="lg" style="margin-top:4px"><span class="sw" style="background:#2a3546;border-radius:50%"></span>step number in the primary flow</div>`;
+  h += `</div></div>`;
+
+  // A guided path through the feature, from meta.readingOrder: [{id, label, note}].
+  // Omitted from the spec → the section isn't rendered at all.
+  const order = (DATA.meta && DATA.meta.readingOrder) || [];
+  if (order.length){
+    h += `<div class="sec"><div class="sech">Reading order<span class="tw">▼</span></div>
+      <div class="secb" style="padding:2px 13px 12px;color:var(--fg2);font-size:11.6px;line-height:1.75">`;
+    order.forEach((o, i) => {
+      const known = N.has(o.id);
+      h += `<div>${i+1} · `;
+      h += known
+        ? `<a style="color:#9fd0ff;cursor:pointer" data-j="${esc(o.id)}">${esc(o.label || o.id)}</a>`
+        : `<span style="color:var(--mut)">${esc(o.label || o.id)}</span>`;
+      h += (o.note ? ` — ${esc(o.note)}` : "") + `</div>`;
+    });
+    h += `</div></div>`;
+  }
+  document.getElementById("left").innerHTML = h;
+}
+document.getElementById("left").addEventListener("click", e => {
+  const sh = e.target.closest(".sech");
+  if (sh){ sh.parentElement.classList.toggle("closed"); return; }
+  const j = e.target.closest("[data-j]");
+  if (j){ select(j.getAttribute("data-j"), true); return; }
+  const f = e.target.closest("[data-f]");
+  if (f){
+    const [p, r] = f.getAttribute("data-f").split("|");
+    const file = DATA.files.find(x => x.p === p && x.r === r);
+    if (file && file.n && file.n.length){
+      const ids = file.n.filter(i => N.has(i));
+      if (ids.length === 1) select(ids[0], true);
+      else { state.sel = ids[0]; state.hi = ids[0]; state.crumbs.push(ids[0]); render(); fitTo(ids); renderInspector(); renderLeft(); }
+    }
+  }
+});
+
+/* ---------------- inspector ---------------- */
+function relsOf(id){
+  const inn = EDGES.filter(e => e.to === id), out = EDGES.filter(e => e.from === id);
+  const bucket = (arr, dir) => {
+    const m = {};
+    arr.forEach(e => {
+      const k = e.kind === "db" ? "STORE OPERATIONS" :
+                e.kind === "http" ? (dir==="out"?"SENDS REQUEST TO":"RECEIVES REQUEST FROM") :
+                e.kind === "data" ? (dir==="out"?"PROVIDES / FLOWS TO":"READS / PROVIDED BY") :
+                (dir === "out" ? "CALLS" : "CALLED BY");
+      (m[k] = m[k] || []).push(e);
+    });
+    return m;
+  };
+  return { out: bucket(out,"out"), inn: bucket(inn,"in") };
+}
+function renderInspector(){
+  const el = document.getElementById("right");
+  if (!state.sel){
+    el.innerHTML = `<div class="iempty"><div class="big">◇</div>
+      <div style="color:var(--fg2);font-size:13px;margin-bottom:8px">Select a node to inspect it</div>
+      <div style="font-size:11.7px;line-height:1.7">You get its identity and change status, why the code exists,<br>the real source from the current working tree with<br>line-by-line explanations, and clickable relationships.</div>
+      ${(() => {
+        // Point at the first flow step (or the reading order), whatever this project's is.
+        const order = (DATA.meta && DATA.meta.readingOrder) || [];
+        const first = order.find(o => N.has(o.id))
+          || DATA.nodes.filter(n => n.flow).sort((a,b) => a.flow - b.flow)[0];
+        const id = first && (first.id);
+        const label = first && (first.label || (N.get(first.id) || {}).label || first.id);
+        return id
+          ? `<div style="margin-top:18px;font-size:11.5px">Start with <a style="color:#9fd0ff;cursor:pointer" data-j="${esc(id)}">${esc(label)}</a>, or turn on <b style="color:var(--fg2)">Feature Flow</b>.</div>`
+          : `<div style="margin-top:18px;font-size:11.5px">Pick a file on the left, or search with <span class="kbd">/</span>.</div>`;
+      })()}</div>`;
+    el.querySelectorAll("[data-j]").forEach(a => a.onclick = () => select(a.getAttribute("data-j"), true));
+    return;
+  }
+  const n = N.get(state.sel), s = ST[n.st] || ST.S;
+  const { out, inn } = relsOf(n.id);
+  let h = "";
+  h += `<div class="ihead">`;
+  if (state.crumbs.length){
+    h += `<div class="crumbs">` + state.crumbs.map((c,i) =>
+      `<span class="cb ${c===state.sel?"now":""}" data-c="${c}">${esc(clip(N.get(c)?.label||c,22))}</span>` +
+      (i < state.crumbs.length-1 ? `<span class="cs">›</span>` : "")).join("") + `</div>`;
+  }
+  h += `<h2>${esc(n.label)}
+    <span class="badge" style="color:${s.c};border-color:${s.c}44;background:${s.c}14">${s.t}${n.u?" + uncommitted edits":""}</span>
+    ${n.flow?`<span class="badge" style="color:var(--flow);border-color:#2f4a6b;background:#132033">flow step ${n.flow}</span>`:""}</h2>
+   <div class="ipath"><span class="rp">${esc(n.repo)}</span><span>${esc(n.file)}</span>${n.lines?`<span class="ln">${esc(n.lines)}</span>`:""}</div>
+   <div class="ikind">${esc((n.kind||"").toUpperCase())}${n.sub?" · "+esc(n.sub):""}</div>
+   </div>`;
+
+  h += `<div class="isec"><h3>What it does & why it exists</h3><div class="isum">${n.summary||""}</div></div>`;
+
+  const fileRec = DATA.files.find(f => f.p === n.file && f.r === n.repo);
+  if (fileRec) h += `<div class="isec"><h3>Why this file is part of the feature</h3><div class="isum">${esc(fileRec.why)}</div></div>`;
+
+  const relGroups = [];
+  Object.entries(inn).forEach(([k,v]) => relGroups.push([k,v,"in"]));
+  Object.entries(out).forEach(([k,v]) => relGroups.push([k,v,"out"]));
+  if (relGroups.length){
+    h += `<div class="isec"><h3>Relationships</h3><div class="rels">`;
+    relGroups.forEach(([k, es, dir]) => {
+      h += `<div class="relg"><div class="rt">${esc(k)}</div>`;
+      es.forEach(e => {
+        const other = dir === "in" ? e.from : e.to, o = N.get(other);
+        h += `<div class="rel" data-r="${other}"><span class="ar">${dir==="in"?"←":"→"}</span>
+          <span class="rn">${esc(o.label)}</span>
+          <span class="rd">${esc(e.label)}</span>${e.inferred?`<span class="inf">inferred</span>`:""}</div>`;
+      });
+      h += `</div>`;
+    });
+    h += `</div></div>`;
+  }
+
+  if (n.segs && n.segs.length){
+    h += `<div class="isec"><h3>Source · current working tree${n.u?" (includes uncommitted edits)":""}</h3>
+      <div class="code ${state.notes?"":"nonotes"}">`;
+    let prev = null;
+    n.segs.forEach(sg => {
+      h += `<div class="cseg"><div class="lines">`;
+      if (prev !== null && sg.l.length && sg.l[0][0] > prev + 1) h += `<div class="gapl"><span class="g">⋮</span><span>…</span></div>`;
+      sg.l.forEach(([ln, txt]) => { h += `<div class="ln2"><span class="g">${ln}</span><span class="c">${hl(txt)}</span></div>`; prev = ln; });
+      h += `</div>`;
+      if (sg.n) h += `<div class="note">${sg.n}</div>`;
+      h += `</div>`;
+    });
+    h += `</div></div>`;
+  } else {
+    h += `<div class="isec"><div class="isum" style="color:var(--mut)">No source excerpt attached to this node — it represents a service or store rather than a code symbol.</div></div>`;
+  }
+
+  h += `<div class="foot"><b>Line numbers</b> are those of the file on disk right now. Non-contiguous excerpts are separated by <b>⋮</b>; nothing has been renumbered or stitched together. Relationships come from reading the implementations, and anything not backed by a literal call is marked <b>inferred</b>.</div>`;
+
+  el.innerHTML = h;
+  el.querySelectorAll("[data-r]").forEach(x => x.onclick = () => select(x.getAttribute("data-r"), true));
+  el.querySelectorAll("[data-c]").forEach(x => x.onclick = () => select(x.getAttribute("data-c"), true));
+}
+
+/* ---------------- header, toolbar, search ---------------- */
+if (DATA.meta.title){
+  document.getElementById("ftitle").textContent = DATA.meta.title;
+  document.title = DATA.meta.title + " · Feature Architecture";
+}
+document.getElementById("branches").innerHTML = (DATA.meta.branches || [])
+  .map(b => `<span class="br"><b>${esc(b.repo)}</b> ${esc(b.branch)}</span>`).join("");
+document.getElementById("overview").innerHTML = DATA.meta.overview || "";
+document.getElementById("stats").innerHTML = (DATA.meta.stats || []).map(s => `<div class="stat"><div class="v">${s.v}</div><div class="k">${s.k}</div></div>`).join("");
+document.getElementById("filters").innerHTML = FILTERS.map(([k,t]) => `<button data-f="${k}" class="${k==="all"?"on":""}">${t}</button>`).join("");
+document.getElementById("filters").addEventListener("click", e => {
+  const b = e.target.closest("[data-f]"); if (!b) return;
+  state.filter = b.getAttribute("data-f");
+  [...e.currentTarget.children].forEach(c => c.classList.toggle("on", c === b));
+  render();
+});
+const flowBtn = document.getElementById("flowBtn");
+flowBtn.onclick = () => {
+  state.flow = !state.flow; flowBtn.classList.toggle("on", state.flow);
+  render();
+  if (state.flow) focusFlow();
+};
+const notesBtn = document.getElementById("notesBtn");
+notesBtn.classList.add("on");
+notesBtn.onclick = () => { state.notes = !state.notes; notesBtn.classList.toggle("on", state.notes); renderInspector(); };
+document.getElementById("fitBtn").onclick = () => fitTo(null);
+document.getElementById("resetBtn").onclick = () => { state.collapsed.clear(); state.filter = "all"; state.flow = false; state.sel = null; state.hi = null; state.crumbs = []; flowBtn.classList.remove("on"); [...document.getElementById("filters").children].forEach((c,i)=>c.classList.toggle("on", i===0)); renderLeft(); renderInspector(); focusFlow(); };
+
+const search = document.getElementById("search"), results = document.getElementById("results");
+function doSearch(q){
+  q = q.trim().toLowerCase();
+  if (!q){ results.classList.remove("on"); return; }
+  const hits = [];
+  DATA.nodes.forEach(n => {
+    const hay = `${n.label} ${n.sub} ${n.file} ${n.kind} ${G.get(GOF.get(n.id))?.t||""}`.toLowerCase();
+    const i = hay.indexOf(q);
+    if (i >= 0) hits.push({ id: n.id, label: n.label, path: `${n.file}${n.lines?":"+n.lines:""}`, score: i });
+  });
+  DATA.files.forEach(f => {
+    if (f.p.toLowerCase().includes(q) && f.n && f.n.length && N.has(f.n[0]))
+      hits.push({ id: f.n[0], label: "file · " + f.p.split("/").pop(), path: f.p, score: 50 });
+  });
+  hits.sort((a,b) => a.score - b.score);
+  results.innerHTML = hits.slice(0,14).map((x,i) =>
+    `<div class="res ${i===0?"sel":""}" data-s="${x.id}"><span class="rl">${esc(x.label)}</span><span class="rp">${esc(x.path)}</span></div>`).join("")
+    || `<div class="res" style="color:var(--mut)">no match</div>`;
+  results.classList.add("on");
+}
+search.addEventListener("input", e => doSearch(e.target.value));
+search.addEventListener("keydown", e => {
+  if (e.key === "Escape"){ search.value=""; results.classList.remove("on"); search.blur(); }
+  if (e.key === "Enter"){ const s = results.querySelector(".res.sel") || results.querySelector(".res[data-s]"); if (s){ select(s.getAttribute("data-s"), true); results.classList.remove("on"); } }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const all = [...results.querySelectorAll(".res[data-s]")]; if (!all.length) return;
+    let i = all.findIndex(x => x.classList.contains("sel"));
+    all.forEach(x => x.classList.remove("sel"));
+    i = e.key === "ArrowDown" ? Math.min(all.length-1, i+1) : Math.max(0, i-1);
+    all[i].classList.add("sel"); all[i].scrollIntoView({ block:"nearest" });
+  }
+});
+results.addEventListener("click", e => {
+  const r = e.target.closest("[data-s]"); if (!r) return;
+  select(r.getAttribute("data-s"), true); results.classList.remove("on");
+});
+document.addEventListener("click", e => { if (!e.target.closest(".searchwrap")) results.classList.remove("on"); });
+window.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== search){ e.preventDefault(); search.focus(); }
+  if (e.key === "Escape"){ state.hi = null; render(); }
+});
+
+syncViewBox(); renderLeft(); renderInspector(); render(); focusFlow();
+</script>
+</body>
+</html>

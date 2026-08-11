@@ -1,0 +1,161 @@
+{
+"meta":{
+  "title": "ky · fix uppercase retry.methods",
+  "repos": { "ky": ".cache/ky" },
+  "branches": [
+    { "repo": "ky", "branch": "fix-methods (vs main, merge-base 4b6cd2f)" }
+  ],
+  "overview": "A one-commit fix in <a href=\"https://github.com/sindresorhus/ky\">sindresorhus/ky</a> with a satisfying cause. <code>retry.methods</code> is documented in lowercase, and the retry check at <code>Ky.ts:321</code> lowercases the <em>request</em> method before comparing — but the caller's array was passed through untouched. So <code>retry: {methods: ['GET']}</code> silently disabled retries: <code>['GET'].includes('get')</code> is <code>false</code>, and the request threw on first failure instead of retrying. The fix normalises caller-supplied methods to lowercase during option normalisation, widens the type from <code>string[]</code> to <code>Array&lt;LiteralUnion&lt;HttpMethod, string&gt;&gt;</code> so known methods autocomplete without rejecting custom ones, and adds a test asserting 4 requests (1 + 3 retries) for <code>methods: ['GET']</code>.",
+  "bands":[
+    {"k":"setup","label":"Request setup","groups":["gEntry","gNorm"]},
+    {"k":"retry","label":"Retry decision","groups":["gRetry"]},
+    {"k":"types","label":"Types","groups":["gTypes"]},
+    {"k":"tests","label":"Tests","groups":["gTests"]}
+  ],
+  "readingOrder":[
+    {"id":"methodCheck","label":"the comparison","note":"the one line the fix exists to satisfy"},
+    {"id":"normalizeRetry","label":"normalizeRetryOptions","note":"where the lowercasing was added"},
+    {"id":"retryOptionsType","label":"RetryOptions.methods","note":"the type half of the change"},
+    {"id":"testUppercase","label":"the regression test","note":"why the request count is the real assertion"},
+    {"id":"testArrayMethods","label":"pre-existing coverage","note":"how the bug survived the suite"}
+  ],
+  "stats":[
+    {"k":"repo","v":"ky"},
+    {"k":"files","v":"3"},
+    {"k":"modified","v":"2"},
+    {"k":"tests added","v":"1"},
+    {"k":"lines","v":"+33 −1"}
+  ]
+},
+
+"files":[
+ {"p":"source/utils/normalize.ts","r":"ky","s":"M","g":"Option normalisation","why":"Where the fix lives. normalizeRetryOptions already merged caller options over defaults; it now lowercases a caller-supplied methods array so the downstream comparison can match.","n":["normalizeRetry","defaultRetry","retryMethods"]},
+ {"p":"source/types/retry.ts","r":"ky","s":"M","g":"Types","why":"Types the retry option bag. methods was string[], which gave no autocomplete and implied any string was equally expected; it is now a LiteralUnion of the known HTTP methods plus string.","n":["retryOptionsType"]},
+ {"p":"test/retry.ts","r":"ky","s":"A","g":"Tests","why":"Adds the regression test. Counts requests against a server that always returns 408, so it fails if uppercase methods stop being retried.","n":["testUppercase","testArrayMethods"]},
+ {"p":"source/core/Ky.ts","r":"ky","s":"S","g":"Retry decision","why":"Pre-existing. Normalises options in the constructor and owns the retry loop; line 321 is the comparison that the bug turned into a silent no-retry.","n":["kyCtor","retryLoop","calcRetryDelay","methodCheck","calcDelay"]},
+ {"p":"source/index.ts","r":"ky","s":"S","g":"Entry point","why":"Pre-existing. The public ky() factory every request enters through.","n":["kyEntry"]},
+ {"p":"source/types/common.ts","r":"ky","s":"S","g":"Types","why":"Pre-existing. LiteralUnion is the trick that keeps literal autocomplete while still accepting any string.","n":["literalUnion"]},
+ {"p":"source/types/options.ts","r":"ky","s":"S","g":"Types","why":"Pre-existing. HttpMethod is the lowercase union the retry list is now checked against.","n":["httpMethod"]}
+],
+
+"groups":[
+ {"id":"gEntry","t":"Entry point","n":["kyEntry","kyCtor"]},
+ {"id":"gNorm","t":"Option normalisation","n":["normalizeRetry","defaultRetry","retryMethods"]},
+ {"id":"gTypes","t":"Types","n":["retryOptionsType","literalUnion","httpMethod"]},
+ {"id":"gRetry","t":"Retry decision","n":["retryLoop","calcRetryDelay","methodCheck","calcDelay"]},
+ {"id":"gTests","t":"Tests","n":["testUppercase","testArrayMethods"]}
+],
+
+"edges":[
+ ["kyEntry","kyCtor","Ky.create(input, options)","call",1],
+ ["kyCtor","normalizeRetry","normalizeRetryOptions(options.retry)","call",1],
+ ["normalizeRetry","defaultRetry","spreads defaults","data",0],
+ ["defaultRetry","retryMethods","default list · lowercase","data",0],
+ ["retryOptionsType","normalizeRetry","types the input","data",0],
+ ["literalUnion","retryOptionsType","keeps autocomplete","data",0],
+ ["httpMethod","retryOptionsType","known methods","data",0],
+ ["kyCtor","retryLoop","wraps the request","call",1],
+ ["retryLoop","calcRetryDelay","on failure","call",1],
+ ["calcRetryDelay","methodCheck","is this method retriable?","call",1],
+ ["methodCheck","normalizeRetry","reads normalised methods","data",1],
+ ["calcRetryDelay","calcDelay","backoff + jitter","call",0],
+ ["retryLoop","retryLoop","recurses until limit","call",0],
+ ["testUppercase","normalizeRetry","verifies lowercasing","data",0],
+ ["testUppercase","methodCheck","exercises the comparison","data",0],
+ ["testArrayMethods","methodCheck","pre-existing coverage","data",0]
+],
+
+"nodes":[
+{"id":"kyEntry","x":40,"y":90,"label":"ky() factory","sub":"source/index.ts:34","kind":"entry","st":"S","file":"source/index.ts","repo":"ky","flow":1,
+ "summary":"The public entry point. Every request starts here and is handed to <code>Ky.create</code> with the caller's options merged over any instance defaults.",
+ "segs":[
+  {"from":10,"to":12,"n":"<code>createInstance</code> closes over instance defaults and returns a callable. <code>validateAndMerge</code> combines those defaults with the per-call options, so <code>retry</code> may arrive from either — which is why normalisation has to happen once, centrally, rather than at each call site."},
+  {"from":34,"to":36,"n":"The default export is a pre-built instance with no defaults, so <code>ky(url, {retry: …})</code> is the path the bug was reported on."}
+ ]},
+
+{"id":"kyCtor","x":40,"y":190,"label":"Ky constructor","sub":"source/core/Ky.ts:207","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":2,
+ "summary":"Builds the internal options object. Every option is normalised exactly once here, which is what makes <code>normalizeRetryOptions</code> the single correct place to fix the casing.",
+ "segs":[
+  {"from":204,"to":209,"n":"Note line 204 alongside 207: the <em>request</em> method is normalised by <code>normalizeRequestMethod</code> (which uppercases known methods), while the <em>retry</em> list goes through <code>normalizeRetryOptions</code>. Two independent normalisations of the same vocabulary, in opposite directions — that mismatch is the root of the bug."}
+ ]},
+
+{"id":"normalizeRetry","x":350,"y":190,"label":"normalizeRetryOptions()","sub":"source/utils/normalize.ts:28","kind":"function","st":"M","file":"source/utils/normalize.ts","repo":"ky","flow":3,
+ "summary":"Turns whatever the caller passed as <code>retry</code> — a number, a partial object, or nothing — into a fully-populated internal shape. <strong>This is where the fix lands:</strong> a caller-supplied <code>methods</code> array is now lowercased so the retry check can match it.",
+ "segs":[
+  {"from":28,"to":34,"n":"<code>retry: 3</code> is shorthand for \"three attempts, defaults for everything else\". Note this early return skips the new lowercasing entirely — correctly, because there is no caller-supplied <code>methods</code> array on this path."},
+  {"from":36,"to":42,"n":"Shape validation for the two array options, throwing rather than coercing. Worth seeing before the fix: it establishes that by the time we reach the merge, <code>methods</code> is either absent or a real array — so <code>.map</code> below is safe without another guard."},
+  {"from":44,"to":46,"n":"Explicit <code>undefined</code> values are stripped before merging. Without this, <code>{methods: undefined}</code> would override the defaults with nothing and disable method filtering — so this filter is what makes the spread on the next lines safe."},
+  {"from":48,"to":54,"n":"The fix. Defaults first, caller options over them, then <code>methods</code> is recomputed last so it wins over the spread on line 50. <code>.map(toLowerCase)</code> makes <code>['GET']</code> into <code>['get']</code>, which is what <code>Ky.ts:321</code> compares against. The ternary matters: when the caller passed no methods, it falls back to <code>defaultRetryOptions.methods</code> rather than mapping over <code>undefined</code>."}
+ ]},
+
+{"id":"defaultRetry","x":350,"y":290,"label":"defaultRetryOptions","sub":"source/utils/normalize.ts:16","kind":"config","st":"S","file":"source/utils/normalize.ts","repo":"ky",
+ "summary":"The baseline every retry config is merged onto.",
+ "segs":[
+  {"from":16,"to":26,"n":"<code>methods: retryMethods</code> is already lowercase, which is why the default path never hit the bug — only a caller-supplied list did. Note the defaults deliberately exclude <code>post</code> and <code>patch</code>: retrying a non-idempotent request could duplicate a write."}
+ ]},
+
+{"id":"retryMethods","x":350,"y":390,"label":"retryMethods","sub":"source/utils/normalize.ts:8","kind":"config","st":"S","file":"source/utils/normalize.ts","repo":"ky",
+ "summary":"The lowercase list of methods considered safe to retry — the casing convention the whole comparison depends on.",
+ "segs":[
+  {"from":8,"to":12,"n":"All lowercase. Since <code>Ky.ts:321</code> lowercases the incoming request method before the <code>includes</code> check, lowercase is the internal canonical form; the fix simply makes caller input conform to it."}
+ ]},
+
+{"id":"retryOptionsType","x":40,"y":420,"label":"RetryOptions.methods","sub":"source/types/retry.ts:29","kind":"type","st":"M","file":"source/types/retry.ts","repo":"ky",
+ "summary":"The typing half of the change: <code>string[]</code> became <code>Array&lt;LiteralUnion&lt;HttpMethod, string&gt;&gt;</code>, so editors suggest the six known methods while still accepting any custom verb.",
+ "segs":[
+  {"from":1,"to":2,"n":"Both imports are new in this commit — the type change is what pulled them in."},
+  {"from":24,"to":29,"n":"Line 29 is the change (previously <code>methods?: string[]</code>). The doc comment above it already documented lowercase defaults, so the type now nudges callers toward the same casing the runtime expects. It is a hint, not enforcement: <code>LiteralUnion</code> still permits <code>'GET'</code>, which is exactly why the runtime fix is the load-bearing one."}
+ ]},
+
+{"id":"literalUnion","x":40,"y":520,"label":"LiteralUnion","sub":"source/types/common.ts:6","kind":"type","st":"S","file":"source/types/common.ts","repo":"ky",
+ "summary":"The idiom that gives literal autocomplete without closing the type. A plain union would reject custom methods; a plain <code>string</code> would suggest nothing.",
+ "segs":[
+  {"from":6,"to":8,"n":"<code>BaseType &amp; {_?: never}</code> is the trick: intersecting with an almost-empty object keeps TypeScript from collapsing the union down to <code>string</code>, so the literal members survive for autocomplete while any string still assigns."}
+ ]},
+
+{"id":"httpMethod","x":40,"y":620,"label":"HttpMethod","sub":"source/types/options.ts:11","kind":"type","st":"S","file":"source/types/options.ts","repo":"ky",
+ "summary":"The canonical lowercase union of methods ky knows about.",
+ "segs":[
+  {"from":11,"to":11,"n":"Lowercase, matching <code>requestMethods</code> in <code>core/constants.ts</code> (which has a type-level test asserting the two stay in sync). This is the vocabulary the retry list is now typed against."}
+ ]},
+
+{"id":"retryLoop","x":660,"y":90,"label":"#retry()","sub":"source/core/Ky.ts:387","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":4,
+ "summary":"The retry loop: run the request, and on failure ask <code>#calculateRetryDelay</code> how long to wait — or let the error through.",
+ "segs":[
+  {"from":387,"to":394,"n":"The control flow that makes the bug invisible: <code>#calculateRetryDelay</code> either returns a delay or <b>throws the original error</b>. So a method that fails the retriability check surfaces as the plain request error with no indication that a retry was skipped — which is why <code>methods: ['GET']</code> looked like \"retries just don't work\" rather than a config problem."}
+ ]},
+
+{"id":"calcRetryDelay","x":660,"y":190,"label":"#calculateRetryDelay()","sub":"source/core/Ky.ts:305","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":5,
+ "summary":"Decides whether this failure is retriable at all, and if so how long to wait. The order of its checks is the retry policy.",
+ "segs":[
+  {"from":305,"to":318,"n":"Attempt count first (cheapest bail-out), then non-<code>Error</code> throws are wrapped for consistency. The <code>ForceRetryError</code> branch deliberately returns <b>before</b> the method check — an <code>afterResponse</code> hook that forces a retry bypasses method filtering by design, so that path was never affected by this bug."},
+  {"from":320,"to":323,"n":"The comparison at the heart of the fix, shown in context: reached only for non-forced retries, and throwing here is what silently cancelled retries for uppercase methods."}
+ ]},
+
+{"id":"methodCheck","x":660,"y":290,"label":"method retriability check","sub":"source/core/Ky.ts:321","kind":"gate","st":"S","file":"source/core/Ky.ts","repo":"ky","flow":6,
+ "summary":"The single line the whole change exists to satisfy. It lowercases the request's method but takes the allow-list as-is — so the two sides only meet if the allow-list is already lowercase.",
+ "segs":[
+  {"from":321,"to":323,"n":"<code>this.request.method</code> is uppercase by then (<code>normalizeRequestMethod</code> uppercases known methods at construction), so <code>.toLowerCase()</code> yields <code>'get'</code>. Before the fix the allow-list was the caller's <code>['GET']</code>, so <code>includes('get')</code> was <code>false</code> and line 322 threw. Both sides are now lowercase. Fixing it here instead — by lowercasing the list at comparison time — would have re-run the work on every failure and left <code>options.retry.methods</code> inconsistent for anything else reading it."}
+ ]},
+
+{"id":"calcDelay","x":660,"y":390,"label":"#calculateDelay()","sub":"source/core/Ky.ts:286","kind":"function","st":"S","file":"source/core/Ky.ts","repo":"ky",
+ "summary":"Computes the backoff for an attempt that has already been judged retriable. Unrelated to the fix, included because it is the other half of what the retry decision returns.",
+ "segs":[
+  {"from":286,"to":302,"n":"Exponential backoff, optional jitter (boolean or custom function), clamped by <code>backoffLimit</code>. Lines 295–297 fall back to the unjittered delay if a custom jitter function returns something non-finite or negative — a small piece of defensiveness against user-supplied callbacks."}
+ ]},
+
+{"id":"testUppercase","x":970,"y":140,"label":"normalizes uppercase methods","sub":"test/retry.ts:506","kind":"test","st":"A","file":"test/retry.ts","repo":"ky",
+ "summary":"The regression test. Serves 408 forever and counts requests, so it fails the moment uppercase methods stop being retried.",
+ "segs":[
+  {"from":506,"to":513,"n":"A local server that always answers 408 (Request Timeout) and increments a counter. 408 is in the default <code>retryStatusCodes</code>, so the status is never the reason a retry is skipped — isolating the method check as the only variable."},
+  {"from":515,"to":525,"n":"The exercise: <code>limit: 3</code> with <code>methods: ['GET']</code> — uppercase, which is precisely what used to fail. <code>throwsAsync</code> is expected even when the fix works, because all four attempts return 408 and ky eventually throws; the assertion that actually detects the bug is the request count."},
+  {"from":527,"to":530,"n":"<code>requestCount === 4</code> is the real assertion: one initial request plus three retries. Before the fix this was <b>1</b> — the request threw immediately without retrying. A count assertion rather than an error-message assertion is what makes this test able to see the difference."}
+ ]},
+
+{"id":"testArrayMethods","x":970,"y":260,"label":"retry on 408 with methods array","sub":"test/retry.ts:480","kind":"test","st":"S","file":"test/retry.ts","repo":"ky",
+ "summary":"Pre-existing coverage, included to show why the bug survived: the suite already tested a caller-supplied methods array — but in lowercase, so it passed throughout.",
+ "segs":[
+  {"from":480,"to":484,"n":"Same shape as the new test, and the reason casing slipped through: this asserts that a caller-supplied array is honoured, which it was — as long as it was already lowercase. The gap was never \"is <code>methods</code> respected\" but \"is it normalised\", and the new test is the one that asks that question."}
+ ]}
+]
+}

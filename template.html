@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature Architecture Explorer</title>
+<style>
+:root{
+  --bg:#0a0c10; --panel:#11141a; --panel2:#151922; --line:#212734; --line2:#2b3342;
+  --fg:#e6e9ef; --fg2:#a7b0c0; --mut:#727d90; --dim:#525c6e;
+  --added:#3fb950; --mod:#d29922; --unc:#a371f7; --sup:#6e7681; --infra:#58a6ff; --store:#39c5cf;
+  --flow:#58a6ff; --danger:#f85149;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2a3140;border-radius:6px;border:2px solid var(--panel)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- shell ---------- */
+#app{display:flex;flex-direction:column;height:100%}
+header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#12161d,#0d1015);flex:0 0 auto}
+.hrow{display:flex;align-items:flex-start;gap:22px 26px;padding:13px 18px 12px;flex-wrap:wrap}
+.htitle{min-width:0;flex:1 1 auto}
+.htitle h1{margin:0 0 5px;font-size:14.5px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.htitle h1 .dotmark{width:7px;height:7px;border-radius:50%;background:var(--flow);box-shadow:0 0 0 3px rgba(88,166,255,.14)}
+.branches{display:flex;flex-wrap:wrap;gap:6px}
+.br{display:inline-flex;align-items:center;gap:6px;font:11px/1 var(--mono);color:var(--fg2);background:#0e1218;border:1px solid var(--line2);border-radius:5px;padding:4px 7px}
+.br b{color:var(--mut);font-weight:500}
+/* Full-width own row: squeezed into a narrow column this text wrapped to ~10 lines and made the header 376px tall. */
+.hsum{flex:1 1 100%;order:3;color:var(--fg2);font-size:12.3px;max-width:1180px}
+@media (min-width:1750px){.hsum{flex:1 1 460px;order:0;min-width:340px}}
+.hsum em{color:var(--fg);font-style:normal;font-weight:600}
+.hsum code{font:11.5px var(--mono);color:#9fd0ff;background:#0e1622;border:1px solid #1d2b3d;border-radius:4px;padding:1px 4px}
+.stats{display:flex;gap:0;flex:0 0 auto;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0e1117}
+.stat{padding:7px 13px;border-right:1px solid var(--line);text-align:center;min-width:66px}
+.stat:last-child{border-right:0}
+.stat .v{font:600 15px/1.1 var(--mono);color:var(--fg)}
+.stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-top:3px}
+
+/* ---------- toolbar ---------- */
+.tools{display:flex;align-items:center;gap:8px;padding:7px 18px;border-top:1px solid var(--line);background:#0d1014;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{padding:5px 10px;font-size:11.5px;color:var(--fg2);border-right:1px solid var(--line2)}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:#171c25;color:var(--fg)}
+.seg button.on{background:#1b2534;color:#cfe6ff;box-shadow:inset 0 -2px 0 var(--flow)}
+.tbtn{padding:5px 10px;font-size:11.5px;color:var(--fg2);border:1px solid var(--line2);border-radius:7px}
+.tbtn:hover{background:#171c25;color:var(--fg)}
+.tbtn.on{background:#1b2534;color:#cfe6ff;border-color:#2f4a6b}
+.spacer{flex:1}
+.searchwrap{position:relative}
+#search{width:280px;padding:6px 10px 6px 28px;background:#0b0e13;border:1px solid var(--line2);border-radius:7px;color:var(--fg);font-size:12px;outline:none}
+#search:focus{border-color:#31527a;box-shadow:0 0 0 3px rgba(88,166,255,.1)}
+.searchwrap .ic{position:absolute;left:9px;top:6px;color:var(--mut);font-size:12px}
+.kbd{font:10px var(--mono);color:var(--mut);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 4px}
+#results{position:absolute;top:34px;left:0;width:420px;max-height:340px;overflow:auto;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 40px rgba(0,0,0,.6);z-index:60;display:none}
+#results.on{display:block}
+.res{display:flex;align-items:center;gap:9px;padding:7px 11px;border-bottom:1px solid var(--line);cursor:pointer}
+.res:last-child{border-bottom:0}
+.res:hover,.res.sel{background:#1c2331}
+.res .rl{font-size:12px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .rp{font:10.5px var(--mono);color:var(--mut);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;direction:rtl;text-align:left}
+
+/* ---------- body ---------- */
+.body{flex:1;display:grid;grid-template-columns:274px minmax(0,1fr) 500px;min-height:0}
+.pane{min-height:0;overflow:auto;background:var(--panel)}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line);background:#0f1218}
+#center{background:#0b0e12;position:relative;overflow:hidden}
+
+.sec{border-bottom:1px solid var(--line)}
+.sech{display:flex;align-items:center;gap:7px;padding:9px 13px;font-size:10.5px;text-transform:uppercase;letter-spacing:.075em;color:var(--mut);font-weight:600;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--panel);z-index:5}
+.sech:hover{color:var(--fg2)}
+.sech .cnt{margin-left:auto;font:10px var(--mono);color:var(--dim);background:#0d1116;border:1px solid var(--line);border-radius:9px;padding:1px 6px}
+.sech .tw{transition:transform .16s;font-size:9px;color:var(--dim)}
+.sec.closed .tw{transform:rotate(-90deg)}
+.sec.closed .secb{display:none}
+.secb{padding:2px 0 9px}
+
+.grp{margin:5px 0 2px;padding:0 13px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);display:flex;align-items:center;gap:6px}
+.grp:before{content:"";height:1px;flex:1;background:var(--line);order:2}
+.f{display:flex;align-items:center;gap:8px;padding:3px 13px 3px 15px;cursor:pointer;font-size:11.8px;color:var(--fg2)}
+.f:hover{background:#161b23;color:var(--fg)}
+.f.act{background:#1a2230;color:#fff;box-shadow:inset 2px 0 0 var(--flow)}
+.st{flex:0 0 15px;height:15px;border-radius:3px;font:600 9px/15px var(--mono);text-align:center;color:#0a0c10}
+.st.A{background:var(--added)} .st.M{background:var(--mod)} .st.U{background:var(--unc)} .st.S{background:var(--sup);color:#e6e9ef} .st.I{background:var(--infra)}
+.fp{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11px}
+.fu{flex:0 0 auto;color:var(--unc);font-size:10px;title:"has uncommitted edits"}
+.fmeta{font:9.5px var(--mono);color:var(--dim);flex:0 0 auto}
+
+.legend{padding:4px 13px 12px;display:grid;gap:5px}
+.lg{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fg2)}
+.lg .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.lg .ln{width:22px;height:0;border-top:2px solid var(--mut);flex:0 0 auto}
+.lg .ln.d{border-top-style:dashed}
+.lg .ln.t{border-top-style:dotted}
+.lg .ln.f{border-color:var(--flow);border-top-width:3px}
+
+/* ---------- graph ---------- */
+#svgwrap{position:absolute;inset:0}
+svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+svg.drag{cursor:grabbing}
+.gbox{fill:#0d1117;fill-opacity:.62;stroke:var(--line2);stroke-width:1;rx:12}
+.gbox.hot{stroke:#31527a}
+.glab{font:600 9.5px var(--sans);letter-spacing:.09em;text-transform:uppercase;fill:var(--mut)}
+.gcnt{font:9px var(--mono);fill:var(--dim)}
+.gtog{fill:#161c26;stroke:var(--line2);rx:4;cursor:pointer}
+.gtog:hover{fill:#1f2836}
+.gtogl{font:9px var(--mono);fill:var(--fg2);pointer-events:none;text-anchor:middle}
+
+.nd{cursor:pointer}
+.nb{stroke-width:1.2;rx:7;fill:#141922;stroke:var(--line2)}
+.nd:hover .nb{fill:#1b2230}
+.nd.sel .nb{stroke-width:2}
+.nl{font:600 11.2px var(--sans);fill:var(--fg)}
+.ns{font:10px var(--mono);fill:var(--mut)}
+.nk{font:8.5px var(--sans);letter-spacing:.05em;text-transform:uppercase}
+.nbar{rx:2}
+.nd.dim{opacity:.16}
+.nd.dim2{opacity:.4}
+/* Tests read as verification, not production code: dashed outline, cooler fill. */
+.nd[data-kind="test"] .nb{stroke-dasharray:5 3;fill:#101a18}
+.nd[data-kind="test"]:hover .nb{fill:#16241f}
+.ndot{r:3}
+.edge{fill:none;stroke:#39424f;stroke-width:1.3;pointer-events:stroke}
+.edge:hover{stroke:#7fb4e8;stroke-width:2.2}
+.edge.data{stroke-dasharray:1.5 3.5}
+.edge.http{stroke-dasharray:6 4}
+.edge.db{stroke-width:2;stroke:#2f5560}
+.edge.inf{stroke-dasharray:2 4;stroke:#4a4258}
+.edge.flow{stroke:var(--flow);stroke-width:2.4;filter:url(#glow)}
+.edge.hi{stroke:#9fd0ff;stroke-width:2.4}
+.edge.dim{opacity:.1}
+.el{font:9.5px var(--mono);fill:var(--mut);pointer-events:none}
+.el.flow{fill:#9fd0ff}
+.el.dim{opacity:.08}
+.eb{fill:#0b0e12;fill-opacity:.96;stroke:#1a2130;stroke-width:.6}
+.flowrank{font:700 9px var(--mono);fill:#0a0c10}
+
+.hint{position:absolute;left:12px;bottom:10px;font:10.5px var(--mono);color:var(--dim);pointer-events:none;background:rgba(10,12,16,.8);padding:3px 7px;border-radius:5px}
+#tip{position:absolute;pointer-events:none;z-index:40;max-width:320px;background:#161b24;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;box-shadow:0 14px 32px rgba(0,0,0,.6);display:none;font-size:11.5px;color:var(--fg2)}
+#tip.on{display:block}
+#tip b{display:block;color:var(--fg);font-size:12px;margin-bottom:3px}
+#tip .p{font:10px var(--mono);color:var(--mut);margin-top:5px}
+
+/* ---------- inspector ---------- */
+.iempty{padding:44px 26px;color:var(--mut);text-align:center}
+.iempty .big{font-size:30px;margin-bottom:12px;opacity:.35}
+.ihead{padding:13px 15px 12px;border-bottom:1px solid var(--line);background:#12161d;position:sticky;top:0;z-index:6}
+.crumbs{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:8px;font-size:10.5px}
+.crumbs .cb{color:var(--mut);padding:2px 5px;border-radius:4px;cursor:pointer;font-family:var(--mono)}
+.crumbs .cb:hover{background:#1b2230;color:var(--fg)}
+.crumbs .cs{color:var(--dim)}
+.crumbs .cb.now{color:#cfe6ff;background:#1a2433}
+.ihead h2{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font:600 9.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:4px;border:1px solid}
+.ipath{font:11px var(--mono);color:var(--fg2);word-break:break-all;margin-top:6px;display:flex;gap:7px;align-items:baseline}
+.ipath .rp{color:var(--dim)}
+.ipath .ln{color:#9fd0ff;flex:0 0 auto}
+.ikind{font:10px var(--mono);color:var(--mut);margin-top:4px}
+
+.isec{border-bottom:1px solid var(--line);padding:12px 15px}
+.isec h3{margin:0 0 8px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:650}
+.isum{color:var(--fg2);font-size:12.3px}
+.isum strong{color:var(--fg);font-weight:600}
+.isum code,.rel code{font:11px var(--mono);color:#9fd0ff;background:#0e1622;border:1px solid #1d2b3d;border-radius:4px;padding:0 3px}
+
+.rels{display:grid;gap:9px}
+.relg .rt{font:9.5px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.rel{display:flex;align-items:baseline;gap:7px;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:11.7px}
+.rel:hover{background:#1a2230}
+.rel .ar{color:var(--dim);font-family:var(--mono);flex:0 0 auto}
+.rel .rn{color:#cfe6ff;flex:0 0 auto;font-weight:500}
+.rel .rd{color:var(--mut);font:10.5px var(--mono);margin-left:auto;flex:0 0 auto}
+.rel .inf{color:var(--unc);font-size:9.5px;border:1px solid #3a2f52;border-radius:3px;padding:0 3px}
+
+.code{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0b0e13;margin-bottom:9px}
+/* NB: named .cseg, not .seg — .seg is the toolbar segmented control (display:flex) and would squash the code. */
+.cseg{border-bottom:1px solid var(--line)}
+.cseg:last-child{border-bottom:0}
+.lines{overflow-x:auto;padding:5px 0}
+.ln2{display:flex;font:11.5px/1.62 var(--mono);white-space:pre}
+.ln2:hover{background:#121821}
+.ln2 .g{flex:0 0 46px;text-align:right;padding-right:11px;color:#3f4a5c;user-select:none;position:sticky;left:0;background:#0b0e13}
+.ln2:hover .g{background:#121821;color:#6b7688}
+/* flex:0 0 auto + max-content: without these the code column shrank below its content
+   and long lines wrapped into 100px-tall rows instead of scrolling horizontally. */
+.ln2 .c{padding-right:16px;flex:0 0 auto;min-width:max-content}
+.gapl{display:flex;font:11px var(--mono);color:var(--dim);padding:1px 0}
+.gapl .g{flex:0 0 46px;text-align:right;padding-right:11px;user-select:none}
+.note{padding:7px 11px 8px 57px;background:#0e1319;border-top:1px dashed #1e2634;color:var(--fg2);font-size:11.9px}
+.note:before{content:"→";color:var(--flow);margin-right:6px;font-family:var(--mono)}
+.note b{color:var(--fg);font-weight:600}
+.note code{font:11px var(--mono);color:#9fd0ff}
+.nonotes .note{display:none}
+
+/* syntax — namespaced: single-letter classes collided with .f (sidebar file row, display:flex)
+   and .c (the code cell), which turned function-name tokens into flex blocks and wrapped lines. */
+.tk-k{color:#ff7b72}.tk-s{color:#a5d6ff}.tk-c{color:#6a7684;font-style:italic}
+.tk-n{color:#79c0ff}.tk-f{color:#d2a8ff}.tk-t{color:#7ee787}
+
+.foot{padding:11px 15px 26px;color:var(--dim);font-size:10.5px;line-height:1.6}
+.foot b{color:var(--mut)}
+
+@media (max-width:1500px){.body{grid-template-columns:250px minmax(0,1fr) 440px}}
+@media (max-width:1180px){
+  .body{grid-template-columns:1fr;grid-template-rows:auto minmax(320px,46vh) minmax(0,1fr)}
+  #left{border-right:0;border-bottom:1px solid var(--line);max-height:200px}
+  #right{border-left:0;border-top:1px solid var(--line)}
+  .hsum{flex-basis:100%}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="hrow">
+      <div class="htitle">
+        <h1><span class="dotmark"></span><span id="ftitle">Feature Architecture</span></h1>
+        <div class="branches" id="branches"></div>
+      </div>
+      <div class="hsum" id="overview"></div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="tools">
+      <div class="seg" id="filters"></div>
+      <button class="tbtn" id="flowBtn">◆ Feature Flow</button>
+      <button class="tbtn" id="notesBtn">Explanations</button>
+      <span class="spacer"></span>
+      <div class="searchwrap">
+        <span class="ic">⌕</span>
+        <input id="search" placeholder="Search symbols, files, endpoints…" autocomplete="off" spellcheck="false">
+        <div id="results"></div>
+      </div>
+      <button class="tbtn" id="fitBtn">Fit</button>
+      <button class="tbtn" id="resetBtn">Reset</button>
+      <span class="kbd">/</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="pane" id="left"></div>
+    <div id="center">
+      <div id="svgwrap">
+        <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMinYMin slice">
+          <defs>
+            <filter id="glow" x="-30%" y="-60%" width="160%" height="220%">
+              <feGaussianBlur stdDeviation="2.4" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#4a5566"/></marker>
+            <marker id="ahf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#58a6ff"/></marker>
+            <marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#9fd0ff"/></marker>
+            <marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="#2f5560"/></marker>
+          </defs>
+          <g id="root"></g>
+        </svg>
+      </div>
+      <div class="hint">drag to pan · scroll to zoom · click a node to inspect · click a group header to collapse · <b style="color:var(--mut)">Fit</b> for the whole map</div>
+      <div id="tip"></div>
+    </div>
+    <div class="pane" id="right"></div>
+  </div>
+</div>
+
+<script id="data" type="application/json">
+{"meta":{"title":"Feature Architecture","overview":"","stats":[],"repos":{}},
+ "legend":{"status":[],"edges":[]},
+ "files":[],"groups":[],"edges":[],"nodes":[]}
+</script>
+
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+DATA.nodes = DATA.nodes.filter(n => n.id !== "__SENTINEL__");
+
+const NW = 186, NH = 62, STORE_H = 74;
+const N = new Map(DATA.nodes.map(n => [n.id, n]));
+DATA.nodes.forEach(n => { n.w = NW; n.h = (n.kind === "store" ? STORE_H : NH); });
+
+// Re-space the columns. Authored x values left only a ~44px gutter between columns, which is
+// narrower than most edge labels — over half of them had nowhere to sit and were dropped.
+// Snapping the distinct x values onto a wider grid gives every label room in the gutter.
+const COL_GAP = 310;
+(() => {
+  const cols = [...new Set(DATA.nodes.filter(n => n.x > -9000).map(n => n.x))].sort((a, b) => a - b);
+  const map = new Map(cols.map((x, i) => [x, 40 + i * COL_GAP]));
+  DATA.nodes.forEach(n => { if (map.has(n.x)) n.x = map.get(n.x); });
+})();
+
+// group membership
+const GOF = new Map();
+DATA.groups.forEach(g => g.n.forEach(id => GOF.set(id, g.id)));
+const G = new Map(DATA.groups.map(g => [g.id, g]));
+
+// edges normalised
+const EDGES = DATA.edges.map((e, i) => ({
+  i, from: e[0], to: e[1], label: e[2], kind: e[3], flow: !!e[4], inferred: e[5] === "inf"
+})).filter(e => N.has(e.from) && N.has(e.to));
+
+const ST = {
+  A: { c: "var(--added)", t: "Added" },
+  M: { c: "var(--mod)", t: "Modified" },
+  U: { c: "var(--unc)", t: "Uncommitted" },
+  S: { c: "var(--sup)", t: "Supporting" },
+  I: { c: "var(--infra)", t: "Infrastructure" }
+};
+
+const state = {
+  sel: null, filter: "all", flow: false, notes: true,
+  collapsed: new Set(), crumbs: [], hi: null,
+  z: 1, tx: 0, ty: 0
+};
+
+/* ---------------- syntax highlight ---------------- */
+const KW = new Set(("const let var function return if else for while of in await async new try catch finally throw typeof instanceof class extends export import from as interface type enum implements public private readonly static void null undefined true false this delete break continue switch case default do yield satisfies keyof").split(" "));
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function hl(src){
+  let out = "", i = 0;
+  const push = (cls, txt) => { out += cls ? `<span class="tk-${cls}">${esc(txt)}</span>` : esc(txt); };
+  while (i < src.length){
+    const ch = src[i];
+    // line comment
+    if (ch === "/" && src[i+1] === "/"){ push("c", src.slice(i)); break; }
+    if (ch === "/" && src[i+1] === "*"){ const e = src.indexOf("*/", i+2); const end = e < 0 ? src.length : e+2; push("c", src.slice(i,end)); i = end; continue; }
+    // strings & templates
+    if (ch === '"' || ch === "'" || ch === "`"){
+      let j = i+1;
+      while (j < src.length){ if (src[j] === "\\"){ j += 2; continue; } if (src[j] === ch) { j++; break; } j++; }
+      push("s", src.slice(i, j)); i = j; continue;
+    }
+    // numbers
+    if (/[0-9]/.test(ch) && !/[A-Za-z0-9_$]/.test(src[i-1] || "")){
+      let j = i; while (j < src.length && /[0-9_a-fA-FxX.]/.test(src[j])) j++;
+      push("n", src.slice(i,j)); i = j; continue;
+    }
+    // identifiers
+    if (/[A-Za-z_$]/.test(ch)){
+      let j = i; while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+      const w = src.slice(i,j);
+      if (KW.has(w)) push("k", w);
+      else if (src[j] === "(") push("f", w);
+      else if (/^[A-Z]/.test(w)) push("t", w);
+      else push(null, w);
+      i = j; continue;
+    }
+    push(null, ch); i++;
+  }
+  return out;
+}
+
+/* ---------------- geometry ---------------- */
+function anchorOf(id){
+  const gid = GOF.get(id);
+  if (gid && state.collapsed.has(gid)) return { ...groupBox(gid), gid };
+  const n = N.get(id);
+  return { x: n.x, y: n.y, w: n.w, h: n.h };
+}
+function groupBox(gid){
+  const g = G.get(gid);
+  const ns = g.n.map(id => N.get(id)).filter(Boolean);
+  if (!ns.length) return { x: 0, y: 0, w: 0, h: 0 };
+  const x1 = Math.min(...ns.map(n => n.x)) - 14;
+  const y1 = Math.min(...ns.map(n => n.y)) - 30;
+  const x2 = Math.max(...ns.map(n => n.x + n.w)) + 14;
+  const y2 = Math.max(...ns.map(n => n.y + n.h)) + 14;
+  if (state.collapsed.has(gid)) return { x: x1, y: y1, w: x2-x1, h: 60 };
+  return { x: x1, y: y1, w: x2-x1, h: y2-y1 };
+}
+function visible(id){
+  const gid = GOF.get(id);
+  return !(gid && state.collapsed.has(gid));
+}
+function path(a, b){
+  const sx = a.x + a.w, sy = a.y + a.h/2, ex = b.x, ey = b.y + b.h/2;
+  if (b.x > a.x + a.w - 10){
+    const dx = Math.max(38, (ex - sx) * 0.48);
+    return { d:`M${sx},${sy} C${sx+dx},${sy} ${ex-dx},${ey} ${ex},${ey}`, mx:(sx+ex)/2, my:(sy+ey)/2 - 7 };
+  }
+  // backward / vertical: route around the right side
+  const sx2 = a.x + a.w/2, sy2 = a.y + a.h, ex2 = b.x + b.w/2, ey2 = b.y;
+  if (Math.abs(sx2-ex2) < 6 && b.y > a.y){
+    return { d:`M${sx2},${sy2} C${sx2},${sy2+30} ${ex2},${ey2-30} ${ex2},${ey2}`, mx:sx2, my:(sy2+ey2)/2 - 5 };
+  }
+  const bx = Math.max(a.x + a.w, b.x + b.w) + 46;
+  return { d:`M${a.x+a.w},${a.y+a.h/2} C${bx},${a.y+a.h/2} ${bx},${b.y+b.h/2} ${b.x+b.w},${b.y+b.h/2}`, mx:bx-8, my:(a.y+b.y)/2, back:true };
+}
+
+/* ---------------- filters ---------------- */
+// Status filters are universal. Subsystem filters come from meta.bands in the spec —
+// e.g. {"k":"write","label":"Write path","groups":["gOrch","gWrite"]} — so a project only
+// ever gets controls that mean something for it. Omit meta.bands and you get status only.
+const BAND = {};
+const FILTERS = (() => {
+  const base = [["all","All"],["changed","Changed"],["A","Added"],["M","Modified"],["U","Uncommitted"]];
+  const bands = (DATA.meta && DATA.meta.bands) || [];
+  for (const b of bands) BAND[b.k] = b.groups || [];
+  return [...base, ...bands.map(b => [b.k, b.label]), ["sup","Supporting"]];
+})();
+function passes(n){
+  const f = state.filter;
+  if (f === "all") return true;
+  if (f === "changed") return n.st === "A" || n.st === "M" || n.st === "U" || n.u;
+  if (f === "A" || f === "M" || f === "U") return n.st === f || (f === "U" && !!n.u);
+  if (f === "sup") return n.st === "S" || n.st === "I";
+  const gs = BAND[f]; return gs ? gs.includes(GOF.get(n.id)) : true;
+}
+function inFlow(n){ return !!n.flow; }
+
+/* ---------------- render graph ---------------- */
+const svg = document.getElementById("svg"), root = document.getElementById("root");
+function render(){
+  const parts = [];
+  // groups
+  DATA.groups.forEach(g => {
+    const b = groupBox(g.id);
+    const col = state.collapsed.has(g.id);
+    const anyPass = g.n.some(id => N.has(id) && passes(N.get(id)));
+    parts.push(`<g opacity="${anyPass?1:.35}">
+      <rect class="gbox" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="12"></rect>
+      <text class="glab" x="${b.x+13}" y="${b.y+18}">${esc(g.t)}</text>
+      <text class="gcnt" x="${b.x+b.w-46}" y="${b.y+18}" text-anchor="end">${g.n.length}</text>
+      <rect class="gtog" data-g="${g.id}" x="${b.x+b.w-38}" y="${b.y+7}" width="26" height="15"></rect>
+      <text class="gtogl" data-g="${g.id}" x="${b.x+b.w-25}" y="${b.y+18}">${col?"+":"–"}</text>
+      ${col?`<text class="ns" x="${b.x+13}" y="${b.y+44}">${g.n.length} nodes collapsed — click + to expand</text>`:""}
+    </g>`);
+  });
+  // edges
+  const seen = new Set();
+  EDGES.forEach(e => {
+    const a = anchorOf(e.from), b = anchorOf(e.to);
+    if (a.gid && a.gid === b.gid) return;
+    const key = `${a.gid||e.from}>${b.gid||e.to}>${e.label}`;
+    if (seen.has(key)) return; seen.add(key);
+    const p = path(a,b);
+    const nf = N.get(e.from), nt = N.get(e.to);
+    let cls = "edge " + (e.inferred ? "inf" : e.kind === "data" ? "data" : e.kind === "http" ? "http" : e.kind === "db" ? "db" : "");
+    let mk = e.kind === "db" ? "ahd" : "ah";
+    const dimByFilter = !(passes(nf) && passes(nt));
+    const dimByFlow = state.flow && !(e.flow);
+    const isHi = state.hi && (e.from === state.hi || e.to === state.hi);
+    if (e.flow && state.flow){ cls += " flow"; mk = "ahf"; }
+    if (isHi){ cls += " hi"; mk = "ahh"; }
+    if ((dimByFilter || dimByFlow) && !isHi) cls += " dim";
+    // Label text is not emitted here: nodes paint after edges, so an inline label got
+    // overpainted by any node box it crossed. placeEdgeLabels() draws them in a top
+    // layer, measured and positioned at a point on the curve that is actually free.
+    const labText = e.label ? e.label + (e.inferred ? " ⟨inf⟩" : "") : "";
+    // A <title> on every path: in saturated areas a few labels have no clear room and are
+    // dropped, so hovering the arrow is the guaranteed way to read any relationship.
+    const tip = `${nf.label} → ${nt.label}${labText ? ` — ${labText}` : ""}`;
+    parts.push(`<path class="${cls}" d="${p.d}" marker-end="url(#${mk})"${labText ? ` data-lab="${esc(labText)}"` : ""}><title>${esc(tip)}</title></path>`);
+  });
+  // nodes
+  DATA.nodes.forEach(n => {
+    if (!visible(n.id)) return;
+    const s = ST[n.st] || ST.S;
+    let cls = "nd";
+    if (state.sel === n.id) cls += " sel";
+    if (!passes(n)) cls += " dim";
+    else if (state.flow && !inFlow(n)) cls += " dim2";
+    const stroke = state.sel === n.id ? "#9fd0ff" : (n.kind === "store" ? "var(--store)" : "var(--line2)");
+    parts.push(`<g class="${cls}" data-n="${n.id}" data-kind="${esc(n.kind || "")}">
+      <rect class="nb" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="7" stroke="${stroke}"></rect>
+      <rect class="nbar" x="${n.x}" y="${n.y}" width="3.5" height="${n.h}" fill="${s.c}" rx="2"></rect>
+      <text class="nl" x="${n.x+12}" y="${n.y+22}">${esc(clip(n.label,23))}</text>
+      <text class="ns" x="${n.x+12}" y="${n.y+38}">${esc(clip(n.sub,25))}</text>
+      <text class="nk" x="${n.x+12}" y="${n.y+53}" fill="${s.c}">${esc((n.kind||"").toUpperCase())}${n.u?" · UNCOMMITTED":""}</text>
+      ${n.flow?`<circle cx="${n.x+n.w-15}" cy="${n.y+16}" r="8.5" fill="${state.flow?"var(--flow)":"#2a3546"}"></circle>
+        <text class="flowrank" x="${n.x+n.w-15}" y="${n.y+19}" text-anchor="middle" fill="${state.flow?"#08111c":"#8fb6e0"}">${n.flow}</text>`:""}
+    </g>`);
+  });
+  parts.push(`<g id="elabels"></g>`); // last child → paints above the nodes
+  root.innerHTML = parts.join("");
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+  placeEdgeLabels();
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function overlaps(a, b){
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+// Measure each label, then walk candidate points along its own curve until one lands clear
+// of every node box and already-placed label. Guessing the plate width from character count
+// (the previous approach) mis-sized it, and placing blindly at the midpoint put labels under nodes.
+function placeEdgeLabels(){
+  const layer = document.getElementById("elabels");
+  if (!layer) return;
+
+  const obstacles = DATA.nodes.filter(n => visible(n.id)).map(n => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+  DATA.groups.forEach(g => { if (state.collapsed.has(g.id)) obstacles.push(groupBox(g.id)); });
+
+  const placed = [];
+  // Dense sweep along the curve, each point also tried at small vertical offsets. The dense
+  // columns (loaders → write → stores) leave only narrow gaps, so a coarse sweep found none.
+  const FRACS = [0.5, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62, 0.34, 0.66, 0.3, 0.7, 0.26, 0.74, 0.22, 0.78, 0.18, 0.82];
+  const DYS = [0, -15, 15, -30, 30, -45, 45];
+  const H = 13;
+
+  root.querySelectorAll("path.edge[data-lab]").forEach(p => {
+    const full = p.getAttribute("data-lab");
+    const isDim = p.classList.contains("dim");
+    const isFlow = p.classList.contains("flow");
+    const L = p.getTotalLength();
+
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("class", "el" + (isFlow ? " flow" : "") + (isDim ? " dim" : ""));
+    t.setAttribute("text-anchor", "middle");
+    layer.appendChild(t);
+
+    // Try the full label; if it cannot be placed anywhere, retry with the short form
+    // rather than dropping the relationship. The full text is always in the inspector.
+    let spot = null, used = null, W = 0;
+    for (const variant of [full, shortLabel(full)]){
+      t.textContent = variant;
+      W = t.getBBox().width + 9; // measured, so the plate can never be too small for the text
+      for (const dy of DYS){
+        for (const f of FRACS){
+          const pt = p.getPointAtLength(L * f);
+          const box = { x: pt.x - W/2, y: pt.y - H/2 + dy, w: W, h: H };
+          if (!obstacles.some(o => overlaps(box, o)) && !placed.some(q => overlaps(box, q))){
+            spot = { pt: { x: pt.x, y: pt.y + dy }, box }; break;
+          }
+        }
+        if (spot) break;
+      }
+      if (spot){ used = variant; break; }
+      if (variant === shortLabel(full)) break; // both forms exhausted
+    }
+    if (!spot){ t.remove(); return; } // genuinely no room — drop rather than print an illegible smear
+
+    t.textContent = used;
+    if (used !== full) t.setAttribute("data-full", full); // hover shows the full text
+    placed.push(spot.box);
+    t.setAttribute("x", spot.pt.x);
+    t.setAttribute("y", spot.pt.y + 3.4);
+    const r = document.createElementNS(SVGNS, "rect");
+    r.setAttribute("class", "eb" + (isDim ? " dim" : ""));
+    r.setAttribute("x", spot.box.x); r.setAttribute("y", spot.box.y);
+    r.setAttribute("width", W); r.setAttribute("height", H); r.setAttribute("rx", 3);
+    layer.insertBefore(r, t);
+    if (used !== full){
+      const tip = document.createElementNS(SVGNS, "title");
+      tip.textContent = full;
+      t.appendChild(tip); r.appendChild(tip.cloneNode(true));
+    }
+  });
+}
+
+// Shortest meaningful form: prefer the shortest "·"-separated clause, then the leading words.
+function shortLabel(s){
+  const bare = s.replace(" ⟨inf⟩", "");
+  const parts = bare.split(" · ").map(x => x.trim()).filter(Boolean);
+  let out = parts.length > 1 ? parts.reduce((a, b) => (b.length < a.length ? b : a)) : bare;
+  out = out.replace(/\s*\([^)]*\)\s*/g, " ").trim(); // drop parenthetical qualifiers
+  if (out.length > 15){
+    const words = out.split(/\s+/);
+    out = words[0].length <= 15 ? words[0] : out.slice(0, 14) + "…";
+  }
+  return out || bare.slice(0, 14) + "…";
+}
+function clip(s,n){ s = s||""; return s.length > n ? s.slice(0,n-1)+"…" : s; }
+
+/* ---------------- pan / zoom ----------------
+   The viewBox tracks the pane's pixel size so one viewBox unit == one CSS pixel.
+   With a fixed oversized viewBox, preserveAspectRatio pre-scaled everything to
+   ~0.32 in a narrow pane and no zoom level could make node text legible. */
+let VW = 1200, VH = 800;
+function syncViewBox(){
+  const r = svg.getBoundingClientRect();
+  VW = Math.max(320, Math.round(r.width));
+  VH = Math.max(240, Math.round(r.height));
+  svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+}
+let drag = null;
+svg.addEventListener("mousedown", e => {
+  if (e.target.closest(".nd") || e.target.closest(".gtog") || e.target.classList.contains("gtogl")) return;
+  drag = { x: e.clientX, y: e.clientY, tx: state.tx, ty: state.ty };
+  svg.classList.add("drag");
+});
+window.addEventListener("mousemove", e => {
+  if (!drag) return;
+  const k = VW / svg.clientWidth;
+  state.tx = drag.tx + (e.clientX - drag.x) * k;
+  state.ty = drag.ty + (e.clientY - drag.y) * k;
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+});
+window.addEventListener("mouseup", () => { drag = null; svg.classList.remove("drag"); });
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const k = VW / svg.clientWidth;
+  const mx = e.offsetX * k, my = e.offsetY * k;
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const nz = Math.min(3.2, Math.max(0.18, state.z * f));
+  state.tx = mx - (mx - state.tx) * (nz / state.z);
+  state.ty = my - (my - state.ty) * (nz / state.z);
+  state.z = nz;
+  root.setAttribute("transform", `translate(${state.tx},${state.ty}) scale(${state.z})`);
+}, { passive: false });
+
+function bbox(ids){
+  const ns = (ids || DATA.nodes.map(n=>n.id)).map(i=>N.get(i)).filter(n=>n && visible(n.id));
+  if (!ns.length) return null;
+  return {
+    x1: Math.min(...ns.map(n=>n.x)) - 60, y1: Math.min(...ns.map(n=>n.y)) - 60,
+    x2: Math.max(...ns.map(n=>n.x+n.w)) + 60, y2: Math.max(...ns.map(n=>n.y+n.h)) + 60
+  };
+}
+function fitTo(ids, minZoom, align){
+  syncViewBox();
+  const b = bbox(ids); if (!b) return;
+  let z = Math.min(VW/(b.x2-b.x1), VH/(b.y2-b.y1), 2.6);
+  if (minZoom) z = Math.max(z, minZoom);
+  state.z = z;
+  const sw = (b.x2-b.x1)*z, sh = (b.y2-b.y1)*z, M = 24;
+  // Centre only when the region actually fits; otherwise anchor to the start edge so
+  // the beginning of the flow is on screen instead of clipped off both sides.
+  state.tx = (align === "start" || sw > VW) ? M - b.x1*z : (VW - sw)/2 - b.x1*z;
+  state.ty = (align === "start" || sh > VH) ? M - b.y1*z : (VH - sh)/2 - b.y1*z;
+  render();
+}
+function centerOn(id){
+  syncViewBox();
+  const n = N.get(id); if (!n) return;
+  const z = Math.max(state.z, 0.9); // 0.9 is now 90% of actual size, so labels stay readable
+  state.z = z;
+  state.tx = VW/2 - (n.x + n.w/2) * z;
+  state.ty = VH/2 - (n.y + n.h/2) * z;
+  render();
+}
+// Opening view: the first steps of the spine at a legible scale. Fitting the whole canvas
+// (2000x1460) into a ~660px pane gives z≈0.33, where 11px labels render at ~4px — a blur.
+// "Fit" still gives the true overview on demand.
+function focusFlow(){
+  const start = DATA.nodes.filter(n => n.flow && n.flow <= 5).map(n => n.id);
+  fitTo(start.length ? start : null, 0.78, "start");
+}
+let rzT = null;
+window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { syncViewBox(); render(); }, 120); });
+
+/* ---------------- interactions ---------------- */
+svg.addEventListener("click", e => {
+  const tg = e.target.closest("[data-g]");
+  if (tg){ const g = tg.getAttribute("data-g"); state.collapsed.has(g) ? state.collapsed.delete(g) : state.collapsed.add(g); render(); return; }
+  const nd = e.target.closest(".nd");
+  if (nd){ select(nd.getAttribute("data-n"), true); return; }
+});
+const tip = document.getElementById("tip");
+svg.addEventListener("mousemove", e => {
+  const nd = e.target.closest(".nd");
+  if (!nd){ tip.classList.remove("on"); state.hi = null; return; }
+  const n = N.get(nd.getAttribute("data-n"));
+  if (!n) return;
+  tip.innerHTML = `<b>${esc(n.label)}</b>${n.summary||""}<div class="p">${esc(n.repo)} · ${esc(n.file)}${n.lines?" : "+esc(n.lines):""}</div>`;
+  const r = svg.getBoundingClientRect();
+  tip.style.left = Math.min(e.clientX - r.left + 16, r.width - 340) + "px";
+  tip.style.top = Math.min(e.clientY - r.top + 14, r.height - 130) + "px";
+  tip.classList.add("on");
+});
+svg.addEventListener("mouseleave", () => tip.classList.remove("on"));
+
+function select(id, pushCrumb){
+  if (!N.has(id)) return;
+  state.sel = id; state.hi = id;
+  if (pushCrumb){
+    const i = state.crumbs.indexOf(id);
+    if (i >= 0) state.crumbs = state.crumbs.slice(0, i+1);
+    else state.crumbs.push(id);
+    if (state.crumbs.length > 9) state.crumbs.shift();
+  }
+  const gid = GOF.get(id);
+  if (gid && state.collapsed.has(gid)) state.collapsed.delete(gid);
+  render(); centerOn(id); renderInspector(); renderLeft();
+  document.getElementById("right").scrollTop = 0;
+}
+
+/* ---------------- left pane ---------------- */
+function renderLeft(){
+  const groups = {};
+  DATA.files.forEach(f => { (groups[f.g] = groups[f.g] || []).push(f); });
+  let h = "";
+  h += `<div class="sec" id="secFiles"><div class="sech">Changed files<span class="cnt">${DATA.files.length}</span><span class="tw">▼</span></div><div class="secb">`;
+  Object.entries(groups).forEach(([g, fs]) => {
+    h += `<div class="grp"><span>${esc(g)}</span></div>`;
+    fs.forEach(f => {
+      const act = f.n && f.n.includes(state.sel);
+      h += `<div class="f ${act?"act":""}" data-f="${esc(f.p)}|${esc(f.r)}" title="${esc(f.why)}">
+        <span class="st ${f.s}">${f.s}</span>
+        <span class="fp">${esc(f.p.replace(/^src\//,""))}</span>
+        ${f.u?`<span class="fu" title="has uncommitted edits">◐</span>`:""}
+      </div>`;
+    });
+  });
+  h += `</div></div>`;
+
+  h += `<div class="sec"><div class="sech">Legend<span class="tw">▼</span></div><div class="legend">`;
+  DATA.legend.status.forEach(([k,t,c]) => { h += `<div class="lg"><span class="sw" style="background:var(--${c})"></span>${esc(t)}</div>`; });
+  h += `<div class="lg" style="margin-top:4px"><span class="ln f"></span>primary feature flow</div>`;
+  h += `<div class="lg"><span class="ln"></span>function call</div>`;
+  h += `<div class="lg"><span class="ln d"></span>HTTP / AMQP request</div>`;
+  h += `<div class="lg"><span class="ln t"></span>data flow · reads / provides</div>`;
+  h += `<div class="lg"><span class="ln" style="border-color:#2f5560;border-top-width:3px"></span>store operation</div>`;
+  h += `<div class="lg"><span class="ln d" style="border-color:#4a4258"></span>inferred ⟨inf⟩</div>`;
+  h += `<div class="lg" style="margin-top:4px"><span class="sw" style="background:#2a3546;border-radius:50%"></span>step number in the primary flow</div>`;
+  h += `</div></div>`;
+
+  // A guided path through the feature, from meta.readingOrder: [{id, label, note}].
+  // Omitted from the spec → the section isn't rendered at all.
+  const order = (DATA.meta && DATA.meta.readingOrder) || [];
+  if (order.length){
+    h += `<div class="sec"><div class="sech">Reading order<span class="tw">▼</span></div>
+      <div class="secb" style="padding:2px 13px 12px;color:var(--fg2);font-size:11.6px;line-height:1.75">`;
+    order.forEach((o, i) => {
+      const known = N.has(o.id);
+      h += `<div>${i+1} · `;
+      h += known
+        ? `<a style="color:#9fd0ff;cursor:pointer" data-j="${esc(o.id)}">${esc(o.label || o.id)}</a>`
+        : `<span style="color:var(--mut)">${esc(o.label || o.id)}</span>`;
+      h += (o.note ? ` — ${esc(o.note)}` : "") + `</div>`;
+    });
+    h += `</div></div>`;
+  }
+  document.getElementById("left").innerHTML = h;
+}
+document.getElementById("left").addEventListener("click", e => {
+  const sh = e.target.closest(".sech");
+  if (sh){ sh.parentElement.classList.toggle("closed"); return; }
+  const j = e.target.closest("[data-j]");
+  if (j){ select(j.getAttribute("data-j"), true); return; }
+  const f = e.target.closest("[data-f]");
+  if (f){
+    const [p, r] = f.getAttribute("data-f").split("|");
+    const file = DATA.files.find(x => x.p === p && x.r === r);
+    if (file && file.n && file.n.length){
+      const ids = file.n.filter(i => N.has(i));
+      if (ids.length === 1) select(ids[0], true);
+      else { state.sel = ids[0]; state.hi = ids[0]; state.crumbs.push(ids[0]); render(); fitTo(ids); renderInspector(); renderLeft(); }
+    }
+  }
+});
+
+/* ---------------- inspector ---------------- */
+function relsOf(id){
+  const inn = EDGES.filter(e => e.to === id), out = EDGES.filter(e => e.from === id);
+  const bucket = (arr, dir) => {
+    const m = {};
+    arr.forEach(e => {
+      const k = e.kind === "db" ? "STORE OPERATIONS" :
+                e.kind === "http" ? (dir==="out"?"SENDS REQUEST TO":"RECEIVES REQUEST FROM") :
+                e.kind === "data" ? (dir==="out"?"PROVIDES / FLOWS TO":"READS / PROVIDED BY") :
+                (dir === "out" ? "CALLS" : "CALLED BY");
+      (m[k] = m[k] || []).push(e);
+    });
+    return m;
+  };
+  return { out: bucket(out,"out"), inn: bucket(inn,"in") };
+}
+function renderInspector(){
+  const el = document.getElementById("right");
+  if (!state.sel){
+    el.innerHTML = `<div class="iempty"><div class="big">◇</div>
+      <div style="color:var(--fg2);font-size:13px;margin-bottom:8px">Select a node to inspect it</div>
+      <div style="font-size:11.7px;line-height:1.7">You get its identity and change status, why the code exists,<br>the real source from the current working tree with<br>line-by-line explanations, and clickable relationships.</div>
+      ${(() => {
+        // Point at the first flow step (or the reading order), whatever this project's is.
+        const order = (DATA.meta && DATA.meta.readingOrder) || [];
+        const first = order.find(o => N.has(o.id))
+          || DATA.nodes.filter(n => n.flow).sort((a,b) => a.flow - b.flow)[0];
+        const id = first && (first.id);
+        const label = first && (first.label || (N.get(first.id) || {}).label || first.id);
+        return id
+          ? `<div style="margin-top:18px;font-size:11.5px">Start with <a style="color:#9fd0ff;cursor:pointer" data-j="${esc(id)}">${esc(label)}</a>, or turn on <b style="color:var(--fg2)">Feature Flow</b>.</div>`
+          : `<div style="margin-top:18px;font-size:11.5px">Pick a file on the left, or search with <span class="kbd">/</span>.</div>`;
+      })()}</div>`;
+    el.querySelectorAll("[data-j]").forEach(a => a.onclick = () => select(a.getAttribute("data-j"), true));
+    return;
+  }
+  const n = N.get(state.sel), s = ST[n.st] || ST.S;
+  const { out, inn } = relsOf(n.id);
+  let h = "";
+  h += `<div class="ihead">`;
+  if (state.crumbs.length){
+    h += `<div class="crumbs">` + state.crumbs.map((c,i) =>
+      `<span class="cb ${c===state.sel?"now":""}" data-c="${c}">${esc(clip(N.get(c)?.label||c,22))}</span>` +
+      (i < state.crumbs.length-1 ? `<span class="cs">›</span>` : "")).join("") + `</div>`;
+  }
+  h += `<h2>${esc(n.label)}
+    <span class="badge" style="color:${s.c};border-color:${s.c}44;background:${s.c}14">${s.t}${n.u?" + uncommitted edits":""}</span>
+    ${n.flow?`<span class="badge" style="color:var(--flow);border-color:#2f4a6b;background:#132033">flow step ${n.flow}</span>`:""}</h2>
+   <div class="ipath"><span class="rp">${esc(n.repo)}</span><span>${esc(n.file)}</span>${n.lines?`<span class="ln">${esc(n.lines)}</span>`:""}</div>
+   <div class="ikind">${esc((n.kind||"").toUpperCase())}${n.sub?" · "+esc(n.sub):""}</div>
+   </div>`;
+
+  h += `<div class="isec"><h3>What it does & why it exists</h3><div class="isum">${n.summary||""}</div></div>`;
+
+  const fileRec = DATA.files.find(f => f.p === n.file && f.r === n.repo);
+  if (fileRec) h += `<div class="isec"><h3>Why this file is part of the feature</h3><div class="isum">${esc(fileRec.why)}</div></div>`;
+
+  const relGroups = [];
+  Object.entries(inn).forEach(([k,v]) => relGroups.push([k,v,"in"]));
+  Object.entries(out).forEach(([k,v]) => relGroups.push([k,v,"out"]));
+  if (relGroups.length){
+    h += `<div class="isec"><h3>Relationships</h3><div class="rels">`;
+    relGroups.forEach(([k, es, dir]) => {
+      h += `<div class="relg"><div class="rt">${esc(k)}</div>`;
+      es.forEach(e => {
+        const other = dir === "in" ? e.from : e.to, o = N.get(other);
+        h += `<div class="rel" data-r="${other}"><span class="ar">${dir==="in"?"←":"→"}</span>
+          <span class="rn">${esc(o.label)}</span>
+          <span class="rd">${esc(e.label)}</span>${e.inferred?`<span class="inf">inferred</span>`:""}</div>`;
+      });
+      h += `</div>`;
+    });
+    h += `</div></div>`;
+  }
+
+  if (n.segs && n.segs.length){
+    h += `<div class="isec"><h3>Source · current working tree${n.u?" (includes uncommitted edits)":""}</h3>
+      <div class="code ${state.notes?"":"nonotes"}">`;
+    let prev = null;
+    n.segs.forEach(sg => {
+      h += `<div class="cseg"><div class="lines">`;
+      if (prev !== null && sg.l.length && sg.l[0][0] > prev + 1) h += `<div class="gapl"><span class="g">⋮</span><span>…</span></div>`;
+      sg.l.forEach(([ln, txt]) => { h += `<div class="ln2"><span class="g">${ln}</span><span class="c">${hl(txt)}</span></div>`; prev = ln; });
+      h += `</div>`;
+      if (sg.n) h += `<div class="note">${sg.n}</div>`;
+      h += `</div>`;
+    });
+    h += `</div></div>`;
+  } else {
+    h += `<div class="isec"><div class="isum" style="color:var(--mut)">No source excerpt attached to this node — it represents a service or store rather than a code symbol.</div></div>`;
+  }
+
+  h += `<div class="foot"><b>Line numbers</b> are those of the file on disk right now. Non-contiguous excerpts are separated by <b>⋮</b>; nothing has been renumbered or stitched together. Relationships come from reading the implementations, and anything not backed by a literal call is marked <b>inferred</b>.</div>`;
+
+  el.innerHTML = h;
+  el.querySelectorAll("[data-r]").forEach(x => x.onclick = () => select(x.getAttribute("data-r"), true));
+  el.querySelectorAll("[data-c]").forEach(x => x.onclick = () => select(x.getAttribute("data-c"), true));
+}
+
+/* ---------------- header, toolbar, search ---------------- */
+if (DATA.meta.title){
+  document.getElementById("ftitle").textContent = DATA.meta.title;
+  document.title = DATA.meta.title + " · Feature Architecture";
+}
+document.getElementById("branches").innerHTML = (DATA.meta.branches || [])
+  .map(b => `<span class="br"><b>${esc(b.repo)}</b> ${esc(b.branch)}</span>`).join("");
+document.getElementById("overview").innerHTML = DATA.meta.overview || "";
+document.getElementById("stats").innerHTML = (DATA.meta.stats || []).map(s => `<div class="stat"><div class="v">${s.v}</div><div class="k">${s.k}</div></div>`).join("");
+document.getElementById("filters").innerHTML = FILTERS.map(([k,t]) => `<button data-f="${k}" class="${k==="all"?"on":""}">${t}</button>`).join("");
+document.getElementById("filters").addEventListener("click", e => {
+  const b = e.target.closest("[data-f]"); if (!b) return;
+  state.filter = b.getAttribute("data-f");
+  [...e.currentTarget.children].forEach(c => c.classList.toggle("on", c === b));
+  render();
+});
+const flowBtn = document.getElementById("flowBtn");
+flowBtn.onclick = () => {
+  state.flow = !state.flow; flowBtn.classList.toggle("on", state.flow);
+  render();
+  if (state.flow) focusFlow();
+};
+const notesBtn = document.getElementById("notesBtn");
+notesBtn.classList.add("on");
+notesBtn.onclick = () => { state.notes = !state.notes; notesBtn.classList.toggle("on", state.notes); renderInspector(); };
+document.getElementById("fitBtn").onclick = () => fitTo(null);
+document.getElementById("resetBtn").onclick = () => { state.collapsed.clear(); state.filter = "all"; state.flow = false; state.sel = null; state.hi = null; state.crumbs = []; flowBtn.classList.remove("on"); [...document.getElementById("filters").children].forEach((c,i)=>c.classList.toggle("on", i===0)); renderLeft(); renderInspector(); focusFlow(); };
+
+const search = document.getElementById("search"), results = document.getElementById("results");
+function doSearch(q){
+  q = q.trim().toLowerCase();
+  if (!q){ results.classList.remove("on"); return; }
+  const hits = [];
+  DATA.nodes.forEach(n => {
+    const hay = `${n.label} ${n.sub} ${n.file} ${n.kind} ${G.get(GOF.get(n.id))?.t||""}`.toLowerCase();
+    const i = hay.indexOf(q);
+    if (i >= 0) hits.push({ id: n.id, label: n.label, path: `${n.file}${n.lines?":"+n.lines:""}`, score: i });
+  });
+  DATA.files.forEach(f => {
+    if (f.p.toLowerCase().includes(q) && f.n && f.n.length && N.has(f.n[0]))
+      hits.push({ id: f.n[0], label: "file · " + f.p.split("/").pop(), path: f.p, score: 50 });
+  });
+  hits.sort((a,b) => a.score - b.score);
+  results.innerHTML = hits.slice(0,14).map((x,i) =>
+    `<div class="res ${i===0?"sel":""}" data-s="${x.id}"><span class="rl">${esc(x.label)}</span><span class="rp">${esc(x.path)}</span></div>`).join("")
+    || `<div class="res" style="color:var(--mut)">no match</div>`;
+  results.classList.add("on");
+}
+search.addEventListener("input", e => doSearch(e.target.value));
+search.addEventListener("keydown", e => {
+  if (e.key === "Escape"){ search.value=""; results.classList.remove("on"); search.blur(); }
+  if (e.key === "Enter"){ const s = results.querySelector(".res.sel") || results.querySelector(".res[data-s]"); if (s){ select(s.getAttribute("data-s"), true); results.classList.remove("on"); } }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const all = [...results.querySelectorAll(".res[data-s]")]; if (!all.length) return;
+    let i = all.findIndex(x => x.classList.contains("sel"));
+    all.forEach(x => x.classList.remove("sel"));
+    i = e.key === "ArrowDown" ? Math.min(all.length-1, i+1) : Math.max(0, i-1);
+    all[i].classList.add("sel"); all[i].scrollIntoView({ block:"nearest" });
+  }
+});
+results.addEventListener("click", e => {
+  const r = e.target.closest("[data-s]"); if (!r) return;
+  select(r.getAttribute("data-s"), true); results.classList.remove("on");
+});
+document.addEventListener("click", e => { if (!e.target.closest(".searchwrap")) results.classList.remove("on"); });
+window.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== search){ e.preventDefault(); search.focus(); }
+  if (e.key === "Escape"){ state.hi = null; render(); }
+});
+
+syncViewBox(); renderLeft(); renderInspector(); render(); focusFlow();
+</script>
+</body>
+</html>
