@@ -194,6 +194,20 @@ verify. Explain the scenario, the inputs, the behaviour exercised, the expected 
 regression it protects against. If the branch has no tests, say so plainly rather than implying
 coverage.
 
+## 9. Multi-commit branches: consider a checkpoint timeline
+
+If the branch has several commits that each represent a real step (not fixup/wip/merge noise),
+`meta.checkpoints` adds a slider that scrubs the graph through that history. Skip this entirely
+for a one- or two-commit branch — it adds a control with nothing worth sliding through.
+
+When it's worth doing: `git log --oneline <merge-base>..HEAD` for the real chronology, collapse
+fixups into whichever adjacent step they actually belong to, and write one checkpoint per
+resulting step — `sha`, a short `label`, and a `summary` that says what changed and **why**, same
+bar as everything else. Add `node.checkpoint` to whichever nodes that step introduced. Illustrative
+`segs` on a checkpoint are read via `git show <sha>:<path>` (read-only — never a checkout), so
+they show the code exactly as it was at that commit, not its current state. See `SCHEMA.md` for
+the full shape.
+
 ---
 
 See [`SCHEMA.md`](SCHEMA.md) for the exact spec format and

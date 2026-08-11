@@ -55,6 +55,11 @@ It is the difference between a document you trust and one you spot-check forever
   edges (calls / data flow / HTTP / store operation), and `⟨inf⟩` on anything inferred rather
   than read from a literal call.
 - **Feature Flow** — the primary execution path numbered and highlighted, everything else dimmed.
+- **A commit timeline**, when the spec has one — a slider that scrubs the graph back through the
+  branch's real history, dimming nodes that didn't exist yet and showing each checkpoint's own
+  narrative plus illustrative excerpts read via `git show`, verified against that exact commit,
+  not the working tree. Optional; most specs won't have one, and the control doesn't render
+  unless they do.
 - **A node inspector** — change status, why the file is part of the feature, clickable
   relationships (called by / calls / reads / store operations), and the real source.
 - **Line-by-line explanation** of intent, not syntax. "Prevents the request from being retried
@@ -149,6 +154,13 @@ node verify.js demo/demo.html demo/ky-retry-methods.spec.json
   and starts overwhelming. Prefer collapsing detail into fewer, better-chosen nodes.
 - **A generated page embeds real source code.** That makes it a private artifact by default —
   see below.
+- **The demo doesn't show the commit timeline.** The ky fix is deliberately one commit — see
+  `demo/ATTRIBUTION.md` — so there's no history worth sliding through. Build one on a real
+  multi-commit branch of your own to see it; `SCHEMA.md` has the shape.
+- **Checkpoint segments don't re-verify a node's *current* source against history.** A node's own
+  `segs` always show its final state; a checkpoint's `segs` show that specific commit's state.
+  Nothing diffs one against the other — the timeline tells the story of *when* things arrived,
+  not a line-by-line diff between commits.
 - **The output path is enforced in code, not just prose.** `npx feature-explorer build
   <spec.json>` with no second argument defaults to `.feature-explorer/` at the repo root and
   auto-opens the result — that's the CLI's own logic, so it doesn't depend on an agent correctly
@@ -170,8 +182,8 @@ things you want on a public URL.
 
 ```
 template.html   the renderer — one HTML file, no dependencies, data injected at build time
-build.js        spec + working tree → explorer page (reads source lines, validates structure)
-verify.js       built page × working tree → pass/fail on every displayed line
+build.js        spec + working tree (+ git history, for checkpoints) → explorer page
+verify.js       built page × working tree (+ git history) → pass/fail on every displayed line
 bin/cli.js      npx entry point — defaults build's output path + auto-opens it, spawns
                 build.js/verify.js, or prints PROMPT/SKILL/SCHEMA
 SCHEMA.md       the spec format

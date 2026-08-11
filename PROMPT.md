@@ -15,6 +15,10 @@ Analyse the feature on the current branch and produce an interactive HTML explor
 1. Establish scope (branch, merge-base, changed files, uncommitted work) with read-only git.
 2. Read the changed code, plus enough surrounding code to know who calls it and what it calls.
 3. Write a spec JSON: nodes, groups, edges, files, and explanations. **Line ranges, never pasted code.**
+   If the branch has several commits that each represent a real step (not fixup/wip/merge noise),
+   consider `meta.checkpoints` — a commit-by-commit timeline slider. One checkpoint per real step
+   (`sha`, `label`, a `summary` of what changed and why), `node.checkpoint` on whichever nodes it
+   introduced. Skip it for a one- or two-commit branch. See `SCHEMA.md`.
 4. `npx feature-explorer build <spec.json>` — **do not pass an output path.** Left to itself the
    tool writes to `.feature-explorer/<name>.html` at the repository root (creating the directory
    if needed) and opens the result automatically. This is deliberate: it is not a style

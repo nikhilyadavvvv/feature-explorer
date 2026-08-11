@@ -15,6 +15,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const [, , specPath, outPath] = process.argv;
 if (!specPath || !outPath) {
@@ -71,35 +72,85 @@ function readLines(repoLabel, rel) {
   return fileCache.get(key);
 }
 
-/* ---------------- expand segments ---------------- */
-let lineCount = 0, segCount = 0;
+// Historical counterpart of readLines: the same file, as it was at a specific commit, via
+// `git show` — never a checkout, so the working tree (and any uncommitted edits in it) is
+// never touched. Used only for meta.checkpoints[].segs; node segs always read live disk.
+const gitCache = new Map();
+function readLinesAtCommit(repoLabel, rel, sha) {
+  const root = roots[repoLabel];
+  if (!root) die(`checkpoint segment references repo "${repoLabel}" which is not in meta.repos`);
+  const key = `${root}::${sha}::${rel}`;
+  if (!gitCache.has(key)) {
+    let content;
+    try {
+      content = execFileSync('git', ['show', `${sha}:${rel}`], { cwd: root, encoding: 'utf8' });
+    } catch (e) {
+      die(`checkpoint sha ${sha}: \`git show ${sha}:${rel}\` failed in ${root} — ` +
+          (e.stderr ? e.stderr.toString().trim().split('\n')[0] : e.message));
+    }
+    gitCache.set(key, content.split('\n'));
+  }
+  return gitCache.get(key);
+}
+
+/* ---------------- expand segments ----------------
+ * Shared by node segs (read live off disk) and checkpoint segs (read via `git show` at a
+ * fixed commit) — same {from,to} → {l} expansion and the same range validation either way.
+ * `getLines(repoLabel, rel)` is the only thing that differs between the two callers.
+ */
+let lineCount = 0, segCount = 0, checkpointLineCount = 0;
+
+function expandSeg(sg, ctxLabel, defaultRepo, defaultFile, getLines, sourceDesc) {
+  if (Array.isArray(sg.l)) return; // literal lines supplied (escape hatch) — left as-is
+
+  if (sg.from == null || sg.to == null)
+    die(`${ctxLabel}: segment needs {from,to} line numbers (or literal "l")`);
+  const repoLabel = sg.r || defaultRepo;
+  const rel = sg.f || defaultFile;
+  if (!rel) die(`${ctxLabel}: segment has no file (set a default file or seg.f)`);
+
+  const lines = getLines(repoLabel, rel);
+  if (sg.from < 1) die(`${ctxLabel}: from=${sg.from} must be >= 1`);
+  if (sg.to > lines.length)
+    die(`${ctxLabel}: ${rel} has ${lines.length} lines${sourceDesc} but segment asks for ${sg.to}`);
+  if (sg.to < sg.from) die(`${ctxLabel}: to=${sg.to} is before from=${sg.from}`);
+
+  sg.l = [];
+  for (let ln = sg.from; ln <= sg.to; ln++) sg.l.push([ln, lines[ln - 1]]);
+  lineCount += sg.l.length;
+  // Always stamp the resolved file/repo, not just on override — previously this was deleted
+  // unconditionally, so a per-segment override (seg.f/seg.r) silently vanished from the built
+  // page and verify.js fell back to the node's default file, checking the wrong source for any
+  // segment that had overridden it. Self-describing segments remove that ambiguity entirely.
+  sg.file = rel; sg.repo = repoLabel;
+  delete sg.from; delete sg.to; delete sg.f; delete sg.r;
+}
+
 for (const n of spec.nodes) {
   if (!Array.isArray(n.segs)) { n.segs = []; continue; }
   for (const sg of n.segs) {
     segCount++;
-    if (Array.isArray(sg.l)) continue; // literal lines supplied (escape hatch) — left as-is
-
-    if (sg.from == null || sg.to == null)
-      die(`node "${n.id}": segment needs {from,to} line numbers (or literal "l")`);
-    const repoLabel = sg.r || n.repo;
-    const rel = sg.f || n.file;
-    if (!rel) die(`node "${n.id}": segment has no file (set node.file or seg.f)`);
-
-    const lines = readLines(repoLabel, rel);
-    if (sg.from < 1) die(`node "${n.id}": from=${sg.from} must be >= 1`);
-    if (sg.to > lines.length)
-      die(`node "${n.id}": ${rel} has ${lines.length} lines but segment asks for ${sg.to}`);
-    if (sg.to < sg.from) die(`node "${n.id}": to=${sg.to} is before from=${sg.from}`);
-
-    sg.l = [];
-    for (let ln = sg.from; ln <= sg.to; ln++) sg.l.push([ln, lines[ln - 1]]);
-    lineCount += sg.l.length;
-    delete sg.from; delete sg.to; delete sg.f; delete sg.r;
+    expandSeg(sg, `node "${n.id}"`, n.repo, n.file, readLines, '');
   }
   // Derive the displayed line range when the author didn't state one.
   if (!n.lines && n.segs.length) {
     const all = n.segs.flatMap(s => (s.l || []).map(x => x[0])).filter(Number.isFinite);
     if (all.length) n.lines = `${Math.min(...all)}–${Math.max(...all)}`;
+  }
+}
+
+// meta.checkpoints — the optional commit timeline. Each checkpoint's segs are read via `git
+// show <sha>:<path>` (never a checkout), so they need their own file/repo every time — there's
+// no single node to default to the way there is for node segs.
+const checkpoints = Array.isArray(spec.meta.checkpoints) ? spec.meta.checkpoints : [];
+for (const cp of checkpoints) {
+  if (!Array.isArray(cp.segs)) { cp.segs = []; continue; }
+  for (const sg of cp.segs) {
+    segCount++;
+    if (!cp.sha) die(`checkpoint "${cp.id || '?'}" has segs but no sha to read them from`);
+    expandSeg(sg, `checkpoint "${cp.id || '?'}"`, undefined, undefined,
+      (repoLabel, rel) => readLinesAtCommit(repoLabel, rel, cp.sha), ` at commit ${cp.sha}`);
+    checkpointLineCount += sg.l.length; // expandSeg already added it to lineCount too
   }
 }
 
@@ -127,6 +178,17 @@ const ungrouped = [...ids].filter(id => !grouped.has(id));
 if (ungrouped.length) problems.push(`nodes in no group: ${ungrouped.join(', ')}`);
 for (const f of spec.files) for (const id of (f.n || []))
   if (!ids.has(id)) problems.push(`file ${f.p} references unknown node: ${id}`);
+
+const checkpointIds = new Set();
+for (const cp of checkpoints) {
+  if (!cp.id) problems.push('a checkpoint has no id');
+  if (checkpointIds.has(cp.id)) problems.push(`duplicate checkpoint id: ${cp.id}`);
+  checkpointIds.add(cp.id);
+  if (!cp.sha) problems.push(`checkpoint ${cp.id || '?'} has no sha`);
+}
+for (const n of spec.nodes)
+  if (n.checkpoint != null && !checkpointIds.has(n.checkpoint))
+    problems.push(`node ${n.id} references unknown checkpoint: ${n.checkpoint}`);
 
 // Overlap check mirrors the renderer's box sizes.
 const NW = 186, NH = 62, SH = 74;
@@ -165,6 +227,7 @@ const byStatus = {};
 for (const f of spec.files) byStatus[f.s] = (byStatus[f.s] || 0) + 1;
 console.log(`✓ ${outPath}  (${(out.length / 1024).toFixed(0)}KB, self-contained)`);
 console.log(`  ${spec.nodes.length} nodes · ${spec.edges.length} edges · ${spec.groups.length} groups · ${spec.files.length} files`);
-console.log(`  ${segCount} segments · ${lineCount} source lines read from disk`);
+console.log(`  ${segCount} segments · ${lineCount - checkpointLineCount} source lines read from disk` +
+  (checkpointLineCount ? ` · ${checkpointLineCount} read from ${checkpoints.length} checkpoint commit(s)` : ''));
 console.log(`  files by status: ${Object.entries(byStatus).map(([k, v]) => k + '=' + v).join(' ') || '—'}`);
 console.log(`  next: node verify.js ${outPath} ${specPath}`);

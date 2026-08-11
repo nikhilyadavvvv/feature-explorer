@@ -103,6 +103,9 @@ header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#12
 
 /* ---------- graph ---------- */
 #svgwrap{position:absolute;inset:0}
+/* Reserve room under the (overlay) timeline bar so it doesn't start covering nodes at the
+   top of the graph. Toggled by JS only when meta.checkpoints is non-empty. */
+#center.has-timeline #svgwrap{top:54px}
 svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
 svg.drag{cursor:grabbing}
 .gbox{fill:#0d1117;fill-opacity:.62;stroke:var(--line2);stroke-width:1;rx:12}
@@ -143,6 +146,21 @@ svg.drag{cursor:grabbing}
 .flowrank{font:700 9px var(--mono);fill:#0a0c10}
 
 .hint{position:absolute;left:12px;bottom:10px;font:10.5px var(--mono);color:var(--dim);pointer-events:none;background:rgba(10,12,16,.8);padding:3px 7px;border-radius:5px}
+
+/* ---------- timeline (commit slider) ---------- */
+/* Only present when meta.checkpoints is non-empty — an unused feature adds zero clutter. */
+#timeline{position:absolute;top:0;left:0;right:0;z-index:8;background:rgba(11,14,18,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line2);padding:9px 14px 8px;display:none}
+#timeline.on{display:block}
+.tl-row{display:flex;align-items:center;gap:10px}
+.tl-btn{flex:0 0 auto;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line2);border-radius:6px;color:var(--fg2);font-size:11px;cursor:pointer}
+.tl-btn:hover{background:#171c25;color:var(--fg)}
+.tl-track-wrap{flex:1;min-width:0;position:relative}
+.tl-track-wrap input[type=range]{width:100%;margin:0;accent-color:var(--flow);cursor:pointer}
+.tl-ticks{display:flex;justify-content:space-between;margin-top:3px;pointer-events:none;padding:0 2px}
+.tl-ticks span{font:9.5px var(--mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.tl-ticks span.now{color:#9fd0ff}
+.tl-label{flex:0 0 auto;font:10.5px var(--mono);color:var(--mut);white-space:nowrap;min-width:128px;text-align:right}
+.tl-label b{color:var(--fg2)}
 #tip{position:absolute;pointer-events:none;z-index:40;max-width:320px;background:#161b24;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;box-shadow:0 14px 32px rgba(0,0,0,.6);display:none;font-size:11.5px;color:var(--fg2)}
 #tip.on{display:block}
 #tip b{display:block;color:var(--fg);font-size:12px;margin-bottom:3px}
@@ -246,6 +264,18 @@ svg.drag{cursor:grabbing}
   <div class="body">
     <div class="pane" id="left"></div>
     <div id="center">
+      <div id="timeline">
+        <div class="tl-row">
+          <button class="tl-btn" id="tlPlay" title="Play through the timeline">▶</button>
+          <button class="tl-btn" id="tlPrev" title="Previous checkpoint">◀</button>
+          <div class="tl-track-wrap">
+            <input type="range" id="tlRange" min="0" max="0" step="1" value="0">
+            <div class="tl-ticks" id="tlTicks"></div>
+          </div>
+          <button class="tl-btn" id="tlNext" title="Next checkpoint">▶</button>
+          <div class="tl-label" id="tlLabel"></div>
+        </div>
+      </div>
       <div id="svgwrap">
         <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMinYMin slice">
           <defs>
@@ -307,6 +337,11 @@ const EDGES = DATA.edges.map((e, i) => ({
   i, from: e[0], to: e[1], label: e[2], kind: e[3], flow: !!e[4], inferred: e[5] === "inf"
 })).filter(e => N.has(e.from) && N.has(e.to));
 
+// commit timeline (optional — absent for most specs, and every consumer below treats an
+// empty array as "the feature doesn't exist", so nothing needs its own presence check)
+const CHECKPOINTS = (DATA.meta && DATA.meta.checkpoints) || [];
+const CP_INDEX = new Map(CHECKPOINTS.map((c, i) => [c.id, i]));
+
 const ST = {
   A: { c: "var(--added)", t: "Added" },
   M: { c: "var(--mod)", t: "Modified" },
@@ -318,7 +353,13 @@ const ST = {
 const state = {
   sel: null, filter: "all", flow: false, notes: true,
   collapsed: new Set(), crumbs: [], hi: null,
-  z: 1, tx: 0, ty: 0
+  z: 1, tx: 0, ty: 0,
+  // Index into CHECKPOINTS of how far the timeline is scrubbed; null when there's nothing to
+  // scrub. Defaults to the last checkpoint (everything revealed) so a spec that adds checkpoints
+  // still opens on the familiar "show the whole graph" view — the slider is an opt-in dive into
+  // history, not a mode you have to escape just to see the finished feature.
+  checkpoint: CHECKPOINTS.length ? CHECKPOINTS.length - 1 : null,
+  playing: false,
 };
 
 /* ---------------- syntax highlight ---------------- */
@@ -416,6 +457,15 @@ function passes(n){
 }
 function inFlow(n){ return !!n.flow; }
 
+// A node exists at the current timeline position if it has no checkpoint (present from the
+// start) or its introducing checkpoint is at or before the scrubbed index. Unrelated to passes()
+// / inFlow() — this is "was it built yet", not "does it match the current filter".
+function passesCheckpoint(n){
+  if (state.checkpoint == null || n.checkpoint == null) return true;
+  const idx = CP_INDEX.get(n.checkpoint);
+  return idx == null || idx <= state.checkpoint;
+}
+
 /* ---------------- render graph ---------------- */
 const svg = document.getElementById("svg"), root = document.getElementById("root");
 function render(){
@@ -445,7 +495,7 @@ function render(){
     const nf = N.get(e.from), nt = N.get(e.to);
     let cls = "edge " + (e.inferred ? "inf" : e.kind === "data" ? "data" : e.kind === "http" ? "http" : e.kind === "db" ? "db" : "");
     let mk = e.kind === "db" ? "ahd" : "ah";
-    const dimByFilter = !(passes(nf) && passes(nt));
+    const dimByFilter = !(passes(nf) && passes(nt)) || !(passesCheckpoint(nf) && passesCheckpoint(nt));
     const dimByFlow = state.flow && !(e.flow);
     const isHi = state.hi && (e.from === state.hi || e.to === state.hi);
     if (e.flow && state.flow){ cls += " flow"; mk = "ahf"; }
@@ -466,7 +516,7 @@ function render(){
     const s = ST[n.st] || ST.S;
     let cls = "nd";
     if (state.sel === n.id) cls += " sel";
-    if (!passes(n)) cls += " dim";
+    if (!passes(n) || !passesCheckpoint(n)) cls += " dim";
     else if (state.flow && !inFlow(n)) cls += " dim2";
     const stroke = state.sel === n.id ? "#9fd0ff" : (n.kind === "store" ? "var(--store)" : "var(--line2)");
     parts.push(`<g class="${cls}" data-n="${n.id}" data-kind="${esc(n.kind || "")}">
@@ -765,6 +815,25 @@ function relsOf(id){
   };
   return { out: bucket(out,"out"), inn: bucket(inn,"in") };
 }
+// Shared by the node inspector and the checkpoint panel — both show a heading plus a series
+// of {l:[[line,text]], n:note} segments in the same code-viewer styling. Pulled out so the
+// timeline's illustrative commit excerpts don't duplicate this rendering.
+function renderSegsBlock(segs, heading){
+  if (!segs || !segs.length) return "";
+  let h = `<div class="isec"><h3>${heading}</h3><div class="code ${state.notes?"":"nonotes"}">`;
+  let prev = null;
+  segs.forEach(sg => {
+    h += `<div class="cseg"><div class="lines">`;
+    if (prev !== null && sg.l.length && sg.l[0][0] > prev + 1) h += `<div class="gapl"><span class="g">⋮</span><span>…</span></div>`;
+    sg.l.forEach(([ln, txt]) => { h += `<div class="ln2"><span class="g">${ln}</span><span class="c">${hl(txt)}</span></div>`; prev = ln; });
+    h += `</div>`;
+    if (sg.n) h += `<div class="note">${sg.n}</div>`;
+    h += `</div>`;
+  });
+  h += `</div></div>`;
+  return h;
+}
+
 function renderInspector(){
   const el = document.getElementById("right");
   if (!state.sel){
@@ -824,19 +893,17 @@ function renderInspector(){
     h += `</div></div>`;
   }
 
+  if (CHECKPOINTS.length && !passesCheckpoint(n)){
+    const cpIdx = CP_INDEX.get(n.checkpoint);
+    const cp = CHECKPOINTS[cpIdx];
+    h += `<div class="isec" style="background:#0e1319"><div class="isum" style="color:var(--mut)">
+      Not part of the branch yet at the current timeline position — introduced at
+      <a style="color:#9fd0ff;cursor:pointer" data-cp="${cpIdx}">checkpoint ${cpIdx+1}: ${esc(cp ? (cp.label||cp.id) : n.checkpoint)}</a>.
+      The source below is still its final, current state.</div></div>`;
+  }
+
   if (n.segs && n.segs.length){
-    h += `<div class="isec"><h3>Source · current working tree${n.u?" (includes uncommitted edits)":""}</h3>
-      <div class="code ${state.notes?"":"nonotes"}">`;
-    let prev = null;
-    n.segs.forEach(sg => {
-      h += `<div class="cseg"><div class="lines">`;
-      if (prev !== null && sg.l.length && sg.l[0][0] > prev + 1) h += `<div class="gapl"><span class="g">⋮</span><span>…</span></div>`;
-      sg.l.forEach(([ln, txt]) => { h += `<div class="ln2"><span class="g">${ln}</span><span class="c">${hl(txt)}</span></div>`; prev = ln; });
-      h += `</div>`;
-      if (sg.n) h += `<div class="note">${sg.n}</div>`;
-      h += `</div>`;
-    });
-    h += `</div></div>`;
+    h += renderSegsBlock(n.segs, `Source · current working tree${n.u?" (includes uncommitted edits)":""}`);
   } else {
     h += `<div class="isec"><div class="isum" style="color:var(--mut)">No source excerpt attached to this node — it represents a service or store rather than a code symbol.</div></div>`;
   }
@@ -846,6 +913,90 @@ function renderInspector(){
   el.innerHTML = h;
   el.querySelectorAll("[data-r]").forEach(x => x.onclick = () => select(x.getAttribute("data-r"), true));
   el.querySelectorAll("[data-c]").forEach(x => x.onclick = () => select(x.getAttribute("data-c"), true));
+  el.querySelectorAll("[data-cp]").forEach(x => x.onclick = () => selectCheckpoint(+x.getAttribute("data-cp")));
+}
+
+/* ---------------- timeline (commit slider) ----------------
+   Entirely inert when meta.checkpoints is empty — renderTimeline() below returns immediately
+   and the bar never gets its "on" class, so nothing in here ever runs for an ordinary spec. */
+function renderCheckpointPanel(idx){
+  const cp = CHECKPOINTS[idx];
+  const el = document.getElementById("right");
+  if (!cp) return;
+  const introduced = DATA.nodes.filter(n => n.checkpoint === cp.id);
+  let h = `<div class="ihead">
+    <div class="crumbs"><span class="cb now">Checkpoint ${idx+1} of ${CHECKPOINTS.length}</span></div>
+    <h2>${esc(cp.label || cp.id)}${cp.sha?` <span class="badge" style="color:var(--flow);border-color:#2f4a6b;background:#132033">${esc(String(cp.sha).slice(0,7))}</span>`:""}</h2>
+    ${cp.date?`<div class="ipath"><span class="rp">${esc(cp.date)}</span></div>`:""}
+  </div>`;
+  h += `<div class="isec"><h3>What changed & why</h3><div class="isum">${cp.summary || ""}</div></div>`;
+  h += renderSegsBlock(cp.segs, `Source · as committed${cp.sha?` (${esc(String(cp.sha).slice(0,7))})`:""}`);
+  if (introduced.length){
+    h += `<div class="isec"><h3>Nodes introduced here</h3><div class="rels"><div class="relg">` +
+      introduced.map(n => `<div class="rel" data-r="${esc(n.id)}"><span class="rn">${esc(n.label)}</span></div>`).join("") +
+      `</div></div></div>`;
+  }
+  h += `<div class="foot">Drag the slider to move through the branch's history — nodes and edges introduced after this point stay dimmed on the graph. Click any node to see its final source and explanations regardless of timeline position.</div>`;
+  el.innerHTML = h;
+  el.querySelectorAll("[data-r]").forEach(x => x.onclick = () => select(x.getAttribute("data-r"), true));
+}
+
+function selectCheckpoint(idx){
+  if (!CHECKPOINTS.length) return;
+  idx = Math.max(0, Math.min(CHECKPOINTS.length - 1, idx));
+  state.checkpoint = idx;
+  state.sel = null; state.hi = null;
+  render();
+  renderCheckpointPanel(idx);
+  renderLeft();
+  updateTimelineUI();
+}
+
+let playTimer = null;
+function stopPlay(){
+  if (playTimer){ clearInterval(playTimer); playTimer = null; }
+  state.playing = false;
+  const btn = document.getElementById("tlPlay");
+  if (btn) btn.textContent = "▶";
+}
+function togglePlay(){
+  if (state.playing){ stopPlay(); return; }
+  state.playing = true;
+  document.getElementById("tlPlay").textContent = "⏸";
+  // Restart from the beginning if already at the end, so "play" always means "watch it build".
+  if ((state.checkpoint ?? 0) >= CHECKPOINTS.length - 1) selectCheckpoint(0);
+  playTimer = setInterval(() => {
+    const next = (state.checkpoint ?? -1) + 1;
+    if (next > CHECKPOINTS.length - 1){ stopPlay(); return; }
+    selectCheckpoint(next);
+  }, 1300);
+}
+
+function updateTimelineUI(){
+  if (!CHECKPOINTS.length) return;
+  const idx = state.checkpoint ?? CHECKPOINTS.length - 1;
+  const range = document.getElementById("tlRange");
+  range.value = idx;
+  const cp = CHECKPOINTS[idx];
+  document.getElementById("tlLabel").innerHTML = cp
+    ? `<b>${esc(clip(cp.label || cp.id, 28))}</b>${cp.date ? " · " + esc(cp.date) : ""}` : "";
+  document.querySelectorAll("#tlTicks span").forEach((s, i) => s.classList.toggle("now", i === idx));
+}
+
+function renderTimeline(){
+  if (!CHECKPOINTS.length) return;
+  document.getElementById("center").classList.add("has-timeline");
+  document.getElementById("timeline").classList.add("on");
+  const range = document.getElementById("tlRange");
+  range.max = CHECKPOINTS.length - 1;
+  range.value = state.checkpoint;
+  document.getElementById("tlTicks").innerHTML =
+    CHECKPOINTS.map(c => `<span>${esc(clip(c.label || c.id, 16))}</span>`).join("");
+  range.addEventListener("input", () => { stopPlay(); selectCheckpoint(+range.value); });
+  document.getElementById("tlPrev").onclick = () => { stopPlay(); selectCheckpoint((state.checkpoint ?? 0) - 1); };
+  document.getElementById("tlNext").onclick = () => { stopPlay(); selectCheckpoint((state.checkpoint ?? 0) + 1); };
+  document.getElementById("tlPlay").onclick = togglePlay;
+  updateTimelineUI();
 }
 
 /* ---------------- header, toolbar, search ---------------- */
@@ -874,7 +1025,12 @@ const notesBtn = document.getElementById("notesBtn");
 notesBtn.classList.add("on");
 notesBtn.onclick = () => { state.notes = !state.notes; notesBtn.classList.toggle("on", state.notes); renderInspector(); };
 document.getElementById("fitBtn").onclick = () => fitTo(null);
-document.getElementById("resetBtn").onclick = () => { state.collapsed.clear(); state.filter = "all"; state.flow = false; state.sel = null; state.hi = null; state.crumbs = []; flowBtn.classList.remove("on"); [...document.getElementById("filters").children].forEach((c,i)=>c.classList.toggle("on", i===0)); renderLeft(); renderInspector(); focusFlow(); };
+document.getElementById("resetBtn").onclick = () => {
+  state.collapsed.clear(); state.filter = "all"; state.flow = false; state.sel = null; state.hi = null; state.crumbs = [];
+  stopPlay(); state.checkpoint = CHECKPOINTS.length ? CHECKPOINTS.length - 1 : null;
+  flowBtn.classList.remove("on"); [...document.getElementById("filters").children].forEach((c,i)=>c.classList.toggle("on", i===0));
+  updateTimelineUI(); renderLeft(); renderInspector(); focusFlow();
+};
 
 const search = document.getElementById("search"), results = document.getElementById("results");
 function doSearch(q){
@@ -919,7 +1075,7 @@ window.addEventListener("keydown", e => {
   if (e.key === "Escape"){ state.hi = null; render(); }
 });
 
-syncViewBox(); renderLeft(); renderInspector(); render(); focusFlow();
+syncViewBox(); renderLeft(); renderInspector(); render(); renderTimeline(); focusFlow();
 </script>
 </body>
 </html>

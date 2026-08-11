@@ -14,6 +14,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const [, , htmlPath, specPath] = process.argv;
 if (!htmlPath) {
@@ -50,7 +51,9 @@ for (const [label, p] of Object.entries(repos))
 
 /* ---------------- structure ---------------- */
 const nodes = DATA.nodes || [];
+const checkpoints = (DATA.meta && DATA.meta.checkpoints) || [];
 const ids = new Set(nodes.map(n => n.id));
+const checkpointIds = new Set(checkpoints.map(c => c.id));
 let structural = 0;
 const dup = nodes.map(n => n.id).filter((x, i, a) => a.indexOf(x) !== i);
 if (dup.length) { console.error('✗ duplicate node ids: ' + dup.join(', ')); structural++; }
@@ -58,7 +61,12 @@ for (const e of (DATA.edges || [])) {
   if (!ids.has(e[0])) { console.error(`✗ edge from unknown node: ${e[0]}`); structural++; }
   if (!ids.has(e[1])) { console.error(`✗ edge to unknown node: ${e[1]}`); structural++; }
 }
+for (const n of nodes)
+  if (n.checkpoint != null && !checkpointIds.has(n.checkpoint)) {
+    console.error(`✗ node ${n.id} references unknown checkpoint: ${n.checkpoint}`); structural++;
+  }
 console.log(`structure: ${nodes.length} nodes, ${(DATA.edges || []).length} edges` +
+            (checkpoints.length ? `, ${checkpoints.length} checkpoints` : '') +
             (structural ? ` — ${structural} problem(s)` : ' — OK'));
 
 /* ---------------- code fidelity ---------------- */
@@ -73,42 +81,73 @@ function lines(label, rel) {
   return cache.get(abs);
 }
 
-let checked = 0, mismatched = 0;
+// Historical counterpart of lines(): checkpoint segments assert against a specific commit,
+// never the working tree, via the same read-only `git show` build.js used to source them.
+// Returns null (never throws) so a bad sha/path reports as "unresolved", same as a missing file.
+const gitCache = new Map();
+function linesAtCommit(label, rel, sha) {
+  const root = roots[label];
+  if (!root) return null;
+  const key = `${root}::${sha}::${rel}`;
+  if (!gitCache.has(key)) {
+    try {
+      gitCache.set(key, execFileSync('git', ['show', `${sha}:${rel}`], { cwd: root, encoding: 'utf8' }).split('\n'));
+    } catch {
+      gitCache.set(key, null);
+    }
+  }
+  return gitCache.get(key);
+}
+
+let checked = 0, mismatched = 0, checkpointChecked = 0;
 const unresolved = new Set();
 const shown = [];
 
-for (const n of nodes) {
-  for (const sg of (n.segs || [])) {
+function checkSegs(segs, label, describeMismatch, getLines) {
+  for (const sg of segs) {
     // A segment may override the node's file/repo (segFile/segRepo survive into the page
     // only if the author used literal lines; built specs bake the path into the node).
-    const label = sg.repo || n.repo;
-    const rel = sg.file || n.file;
+    const repoLabel = sg.repo || label.repo;
+    const rel = sg.file || label.file;
     if (!rel || rel === '—') continue;
-    const L = lines(label, rel);
-    if (!L) { unresolved.add(`${label} :: ${rel}`); continue; }
+    const L = getLines(repoLabel, rel);
+    if (!L) { unresolved.add(label.unresolvedTag(repoLabel, rel)); continue; }
     for (const [ln, txt] of (sg.l || [])) {
       checked++;
       const actual = L[ln - 1];
       if (actual === undefined) {
         mismatched++;
-        if (shown.length < 20) shown.push(`${n.id}  ${rel}:${ln}  — line does not exist (file has ${L.length})`);
+        if (shown.length < 20) shown.push(`${describeMismatch}  ${rel}:${ln}  — line does not exist (file has ${L.length})`);
       } else if (actual !== txt) {
         mismatched++;
         if (shown.length < 20) shown.push(
-          `${n.id}  ${rel}:${ln}\n    page: ${JSON.stringify(txt)}\n    disk: ${JSON.stringify(actual)}`);
+          `${describeMismatch}  ${rel}:${ln}\n    page: ${JSON.stringify(txt)}\n    disk: ${JSON.stringify(actual)}`);
       }
     }
   }
 }
 
+for (const n of nodes) {
+  checkSegs(n.segs || [], { repo: n.repo, file: n.file, unresolvedTag: (l, r) => `${l} :: ${r}` }, n.id, lines);
+}
+
+for (const cp of checkpoints) {
+  const before = checked;
+  checkSegs(cp.segs || [], { repo: undefined, file: undefined, unresolvedTag: (l, r) => `${l} :: ${r} @ ${cp.sha}` },
+    `checkpoint ${cp.id}`, (label, rel) => linesAtCommit(label, rel, cp.sha));
+  checkpointChecked += checked - before;
+}
+
 if (shown.length) { console.error('\nMISMATCHES:'); for (const s of shown) console.error('  ' + s); }
 if (unresolved.size) {
-  console.error('\nUNRESOLVED FILES (no repo root, or file moved/deleted):');
+  console.error('\nUNRESOLVED FILES (no repo root, missing commit, or file moved/deleted):');
   for (const u of unresolved) console.error('  ' + u);
 }
 
-console.log(`\ncode lines checked: ${checked}   mismatches: ${mismatched}`);
+console.log(`\ncode lines checked: ${checked - checkpointChecked}   mismatches: ${mismatched}` +
+  (checkpointChecked ? `\ncheckpoint lines checked (against their own commits): ${checkpointChecked}` : ''));
 const ok = mismatched === 0 && unresolved.size === 0 && structural === 0;
-console.log(ok ? '✓ VERIFIED — every displayed line matches the working tree'
+console.log(ok ? '✓ VERIFIED — every displayed line matches the working tree' +
+                 (checkpoints.length ? ' (and each checkpoint matches its own commit)' : '')
               : '✗ FAILED — do not publish this page until the above is resolved');
 process.exit(ok ? 0 : 1);

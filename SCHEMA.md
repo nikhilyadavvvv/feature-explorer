@@ -32,6 +32,11 @@ just a code viewer. `legend` is optional and defaults to the standard status/edg
   ],
   "readingOrder": [                                 // optional guided path in the sidebar
     { "id": "methodCheck", "label": "the comparison", "note": "the line the fix exists to satisfy" }
+  ],
+  "checkpoints": [                                  // optional commit-by-commit timeline — see below
+    { "id": "c1", "sha": "a1b2c3d", "label": "Normalise caller methods",
+      "date": "2024-03-01", "summary": "<p>Why this commit exists…</p>",
+      "segs": [ { "f": "source/utils/normalize.ts", "r": "ky", "from": 48, "to": 54, "n": "…" } ] }
   ]
 }
 ```
@@ -43,7 +48,38 @@ key here. Multi-repo features simply list more than one.
 > These are local paths and they are written into the built page. Scrub them before publishing if
 > that matters.
 
-`bands` and `readingOrder` are omitted entirely for small features — the controls then don't render.
+`bands`, `readingOrder` and `checkpoints` are omitted entirely for small features — the controls
+then don't render.
+
+### checkpoints — the commit timeline
+
+Optional. When present, the page gets a slider that scrubs the graph back through the branch's
+history, dimming nodes that didn't exist yet and showing each checkpoint's own narrative.
+
+Each checkpoint is one commit (or a squashed handful — see below), in chronological order:
+
+- `id` — unique, referenced by `node.checkpoint` (see the nodes section).
+- `sha` — the commit this checkpoint represents. Required even without `segs`, so the checkpoint
+  stays traceable to real history.
+- `label` — short, shown on the slider tick. Same length discipline as `node.label`.
+- `date` — optional, freeform, shown in the panel.
+- `summary` — the narrative: what changed in this commit and **why**, same intent-not-syntax bar
+  as everything else in this tool. Required if you're bothering to add the checkpoint at all.
+- `segs` — optional illustrative excerpts, **identical shape to node `segs`**, with one difference:
+  they're read via `git show <sha>:<path>` at build time, not off the working tree, so every
+  checkpoint segment needs its own `f`/`r` (there's no default file/repo to fall back to). Use
+  these to show the actual diff-worthy lines from that commit, not the file's current state.
+
+**Curate, don't dump.** A branch's real commit log usually has fixup commits, "wip", typo fixes,
+and merge noise. Collapse those into whichever adjacent checkpoint they actually belong to — the
+same editorial judgement `SKILL.md` asks for when choosing nodes applies here. A 40-commit branch
+should not produce a 40-tick slider; it should produce the handful of checkpoints that actually
+tell the story of how the feature was built.
+
+**`node.checkpoint`** (optional, on any node — see below) is the id of the checkpoint that
+introduced it. Nodes without one are treated as present from the start. This is the only thing
+that drives the slider's reveal/dim — edges have no checkpoint field of their own; an edge is
+shown once both endpoints are.
 
 ## files
 
@@ -104,11 +140,17 @@ A self-edge (`from === to`) renders as a small loop — useful for recursion.
   "file": "source/utils/normalize.ts",          // default file for this node's segments
   "repo": "ky",                                 // must be a key in meta.repos
   "flow": 3,                                    // optional: position in the primary flow
+  "checkpoint": "c1",                           // optional: id of the checkpoint that introduced it
   "lines": "28–54",                             // optional: derived from segments if omitted
   "summary": "…HTML allowed…",                  // what it does and why it exists
   "segs": [ … ]
 }
 ```
+
+**`checkpoint`** only matters if `meta.checkpoints` exists. It doesn't change what the node's
+`segs` show — those stay the node's final, current-working-tree source, same as always. It only
+controls when the timeline slider reveals the node. Omit it and the node is present from the
+start.
 
 **`kind`** is shown as the node's category label and is free-form, but these are meaningful:
 `entry` `function` `handler` `route` `gate` `service` `store` `config` `type` `test` `script`
@@ -149,8 +191,14 @@ numbers. Never fake contiguity.
 - a node in two groups, or in none
 - overlapping node boxes
 - a file entry referencing an unknown node
+- a duplicate checkpoint id, a checkpoint missing `sha`, or `node.checkpoint` referencing an
+  unknown checkpoint
+- a checkpoint segment `git show <sha>:<path>` can't resolve — bad sha, wrong path, or a repo
+  that isn't a git worktree at all
 
 ## What verify.js rejects
 
-Every displayed line, diffed against the working tree — plus duplicate ids and dangling edges.
-Exit code 0 means the page is faithful to the code on disk. Anything else: do not publish.
+Every displayed line, diffed against the working tree — checkpoint segments diffed against
+`git show <sha>:<path>` for their own commit instead — plus duplicate ids, dangling edges, and a
+`node.checkpoint` referencing an unknown checkpoint. Exit code 0 means the page is faithful to
+the code on disk (and, for checkpoints, to history). Anything else: do not publish.
