@@ -1,5 +1,7 @@
 # Feature Architecture Explorer
 
+**[→ nikhilyadavvvv.github.io/feature-explorer](https://nikhilyadavvvv.github.io/feature-explorer/)**
+
 Turn a feature branch into a single self-contained HTML page that explains what was built,
 where each piece lives, how the pieces interact, and what the code actually does — with the
 real source, at the real line numbers, annotated line by line.
@@ -137,7 +139,19 @@ SCHEMA.md       the spec format
 SKILL.md        the analysis procedure, as a Claude Code skill
 PROMPT.md       the same procedure for any other agent
 demo/           a worked example built from sindresorhus/ky (MIT) — see demo/ATTRIBUTION.md
+index.html      the site above — same theme, no build step, no framework
 ```
+
+## The site
+
+`index.html` at the repo root is the page above, plus the live demo embedded and the install
+steps. It's a fork of nothing but its own colours — plain HTML/CSS/JS, no framework, no build
+step, same philosophy as everything else here.
+
+To host your own after forking: **Settings → Pages → Source: Deploy from a branch → Branch:
+`main`, folder `/ (root)` → Save.** `.nojekyll` is already committed so GitHub serves the files
+as-is instead of running them through Jekyll, which would otherwise rewrite `demo/demo.html`'s
+URL and quietly break the embed.
 
 ## License
 
