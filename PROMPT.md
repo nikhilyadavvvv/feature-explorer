@@ -1,10 +1,12 @@
 # Feature Architecture Explorer — agent instructions
 
 Agent-agnostic version of `SKILL.md`. Same procedure, no Claude Code wrapper. Give this file to
-any agent that can read a repository and run Node.
+any agent that can read a repository and run a shell command — no clone required, `npx` fetches
+the two scripts it needs on demand.
 
 Read `SKILL.md` for the full procedure and `SCHEMA.md` for the spec format — this file is the
-short brief plus the rules that must not be broken.
+short brief plus the rules that must not be broken. (Fetch either with
+`npx feature-explorer init --full` / `--schema` if you don't already have them on disk.)
 
 ## Task
 
@@ -13,8 +15,8 @@ Analyse the feature on the current branch and produce an interactive HTML explor
 1. Establish scope (branch, merge-base, changed files, uncommitted work) with read-only git.
 2. Read the changed code, plus enough surrounding code to know who calls it and what it calls.
 3. Write a spec JSON: nodes, groups, edges, files, and explanations. **Line ranges, never pasted code.**
-4. `node build.js <spec.json> <out.html>`
-5. `node verify.js <out.html> <spec.json>` — must exit 0.
+4. `npx feature-explorer build <spec.json> <out.html>` (or `node build.js …` if you cloned the repo)
+5. `npx feature-explorer verify <out.html> <spec.json>` — must exit 0.
 6. Report what you found, and confirm the repository was not modified.
 
 ## Non-negotiable

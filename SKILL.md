@@ -16,6 +16,10 @@ node build.js  <spec.json> <out.html>     # reads real source lines, validates s
 node verify.js <out.html>   <spec.json>   # diffs every displayed line against disk
 ```
 
+(Equivalent as `npx feature-explorer build/verify …` if you're following this procedure without
+a local clone — e.g. it was fetched via `npx feature-explorer init --full` rather than symlinked
+into `~/.claude/skills`.)
+
 **You never transcribe source code into the spec.** You give line ranges; `build.js` reads the
 lines off disk. This is not a convenience — it is what makes the output trustworthy, and it
 removes the single largest source of error (right-looking code at wrong line numbers).

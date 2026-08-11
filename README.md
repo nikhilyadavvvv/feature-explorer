@@ -64,11 +64,28 @@ It is the difference between a document you trust and one you spot-check forever
 
 ## Install
 
+Nothing to install. `npx` fetches the two scripts on demand, straight from GitHub — no clone,
+no leftover files in your project:
+
 ```bash
-git clone https://github.com/<you>/feature-explorer.git
+npx github:nikhilyadavvvv/feature-explorer init
 ```
 
-Requires Node (any version with `fs`/`path` — no dependencies, no install step).
+That prints the agent instructions (`PROMPT.md`) to stdout — hand your agent that command
+verbatim (*"run `npx github:nikhilyadavvvv/feature-explorer init` and follow it on the current
+branch"*) and it takes it from there. `build`/`verify` (below) work the same way.
+
+Once it's [published to npm](#publishing) the `github:` prefix drops and it's just
+`npx feature-explorer init`.
+
+Prefer a local copy — to read the code, or for the Claude Code shortcut below:
+
+```bash
+git clone https://github.com/nikhilyadavvvv/feature-explorer.git
+```
+
+Requires Node (any version with `fs`/`path`) either way — no dependencies, nothing else to
+install.
 
 Optionally, as a Claude Code skill so you can invoke it by name:
 
@@ -79,16 +96,18 @@ ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer
 
 Then, in Claude Code: `/feature-explorer`
 
-Using a different agent (Cursor, Copilot, Aider, Codex, plain ChatGPT with file access)? Point
-it at [`PROMPT.md`](PROMPT.md), which is the same procedure without the Claude-specific wrapper.
+Using a different agent (Cursor, Copilot, Aider, Codex, plain ChatGPT with file access)? Tell it
+to run `npx github:nikhilyadavvvv/feature-explorer init` (or point it at
+[`PROMPT.md`](PROMPT.md) if you cloned) — same procedure either way.
 
 ## Use
 
-The agent does the analysis and writes a spec; the two scripts do the rest.
+The agent does the analysis and writes a spec; two scripts do the rest — via `npx`, or
+`node build.js`/`node verify.js` directly if you cloned.
 
 ```bash
-node build.js  my-feature.spec.json  my-feature.html   # reads the real lines, validates structure
-node verify.js my-feature.html       my-feature.spec.json
+npx github:nikhilyadavvvv/feature-explorer build  my-feature.spec.json my-feature.html
+npx github:nikhilyadavvvv/feature-explorer verify my-feature.html      my-feature.spec.json
 open my-feature.html
 ```
 
@@ -135,12 +154,31 @@ things you want on a public URL.
 template.html   the renderer — one HTML file, no dependencies, data injected at build time
 build.js        spec + working tree → explorer page (reads source lines, validates structure)
 verify.js       built page × working tree → pass/fail on every displayed line
+bin/cli.js      npx entry point — spawns build.js/verify.js, or prints PROMPT/SKILL/SCHEMA
 SCHEMA.md       the spec format
 SKILL.md        the analysis procedure, as a Claude Code skill
 PROMPT.md       the same procedure for any other agent
 demo/           a worked example built from sindresorhus/ky (MIT) — see demo/ATTRIBUTION.md
 index.html      the site above — same theme, no build step, no framework
 ```
+
+## Publishing
+
+`bin/cli.js` + the `bin` field in `package.json` are what make `npx github:nikhilyadavvvv/feature-explorer …`
+work today, with nothing published anywhere — npx clones the repo, reads `package.json`, and runs
+the one script named there. That already works; `npm publish` only shortens the command by
+dropping the `github:` prefix:
+
+```bash
+npm login            # once
+npm publish           # from the repo root — bin, build.js, verify.js, template.html, the
+                       # three docs, LICENSE and README ship; everything else is excluded by
+                       # package.json's "files" list
+```
+
+After that, `npx feature-explorer …` resolves from the registry instead of GitHub. Bump
+`version` in `package.json` and `npm publish` again for updates — npx always fetches the latest
+unless a version is pinned (`npx feature-explorer@1.0.0`).
 
 ## The site
 

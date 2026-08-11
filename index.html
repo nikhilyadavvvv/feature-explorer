@@ -292,14 +292,14 @@ footer{ padding:40px 0 60px }
         <div class="step">
           <div class="num">02</div>
           <h3>Build</h3>
-          <p><code>node build.js spec.json out.html</code> reads those exact lines off disk and
+          <p><code>npx feature-explorer build</code> reads those exact lines off disk and
             validates the structure — dangling edges and overlapping boxes are rejected.</p>
         </div>
         <div class="step">
           <div class="num">03</div>
           <h3>Verify</h3>
-          <p><code>node verify.js out.html spec.json</code> diffs every displayed line against
-            the working tree and exits non-zero on any mismatch.</p>
+          <p><code>npx feature-explorer verify</code> diffs every displayed line against the
+            working tree and exits non-zero on any mismatch.</p>
         </div>
       </div>
     </div>
@@ -429,28 +429,15 @@ code lines checked: 138   mismatches: 0
   <section id="install">
     <p class="wrap eyebrow" style="margin-bottom:0">Install</p>
     <div class="wrap">
-      <h2>Two steps.</h2>
+      <h2>One line. No clone.</h2>
       <p class="section-lede">
-        Clone it, then say one sentence to whatever agent you already use. That's the install.
+        <code>npx</code> fetches it fresh each time — nothing to install, nothing left behind in
+        your project.
       </p>
 
       <div class="install-flow">
         <div class="install-step">
-          <div class="n">1</div>
-          <div class="body">
-            <p>Clone it once, anywhere.</p>
-            <div class="codeblock">
-              <div class="cb-head">
-                <span class="cb-label">bash</span>
-                <button class="copy-btn" type="button" data-copy-target="cb-clone">Copy</button>
-              </div>
-              <pre id="cb-clone">git clone https://github.com/nikhilyadavvvv/feature-explorer.git</pre>
-            </div>
-          </div>
-        </div>
-
-        <div class="install-step">
-          <div class="n">2</div>
+          <div class="n">→</div>
           <div class="body">
             <p>In your own repository, on the branch you want explained, tell your agent —
               Claude Code, Cursor, Copilot, Aider, or plain chat with file access:</p>
@@ -459,19 +446,22 @@ code lines checked: 138   mismatches: 0
                 <span class="cb-label">say this</span>
                 <button class="copy-btn" type="button" data-copy-target="cb-say">Copy</button>
               </div>
-              <pre id="cb-say">Follow feature-explorer/PROMPT.md on the current branch.</pre>
+              <pre id="cb-say">Run npx github:nikhilyadavvvv/feature-explorer init and follow what it prints, on the current branch.</pre>
             </div>
-            <p style="margin-top:12px">It reads the branch, writes a spec, and hands you back
-              one HTML file. Open it — no server, nothing to deploy, nothing to install.</p>
+            <p style="margin-top:12px">It reads the branch, writes a spec, then
+              <code>npx …&nbsp;build</code> and <code>npx …&nbsp;verify</code> render and check
+              the page the same way. You get back one HTML file — open it. No server, nothing to
+              deploy, nothing stays installed.</p>
           </div>
         </div>
       </div>
 
       <div class="tip">
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="M12 3v18M4 8l8 5 8-5"/></svg>
-        <div><b>Using Claude Code?</b> Skip the sentence — symlink it once
-          (<code>ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer</code>) and just
-          type <code>/feature-explorer</code> in any repository from then on.</div>
+        <div><b>Using Claude Code?</b> For the <code>/feature-explorer</code> slash command
+          instead of typing the sentence every time, clone it once and symlink it in:
+          <code>git clone https://github.com/nikhilyadavvvv/feature-explorer.git &amp;&amp;
+          ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer</code></div>
       </div>
 
       <div class="doclinks">

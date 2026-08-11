@@ -1,0 +1,46 @@
+{
+  "name": "feature-explorer",
+  "version": "1.0.0",
+  "description": "Turn a feature branch into a self-contained HTML architecture explorer — real source, real line numbers, verified against the working tree.",
+  "license": "MIT",
+  "author": "Nikhil Yadav",
+  "homepage": "https://nikhilyadavvvv.github.io/feature-explorer/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nikhilyadavvvv/feature-explorer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nikhilyadavvvv/feature-explorer/issues"
+  },
+  "keywords": [
+    "architecture",
+    "diagram",
+    "documentation",
+    "code-review",
+    "onboarding",
+    "llm-agent",
+    "claude-code"
+  ],
+  "bin": {
+    "feature-explorer": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "build.js",
+    "verify.js",
+    "template.html",
+    "PROMPT.md",
+    "SKILL.md",
+    "SCHEMA.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}
