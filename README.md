@@ -1,5 +1,7 @@
 # Feature Architecture Explorer
 
+[![npm](https://img.shields.io/npm/v/feature-explorer.svg)](https://www.npmjs.com/package/feature-explorer)
+
 **[→ nikhilyadavvvv.github.io/feature-explorer](https://nikhilyadavvvv.github.io/feature-explorer/)**
 
 Turn a feature branch into a single self-contained HTML page that explains what was built,
@@ -64,19 +66,16 @@ It is the difference between a document you trust and one you spot-check forever
 
 ## Install
 
-Nothing to install. `npx` fetches the two scripts on demand, straight from GitHub — no clone,
-no leftover files in your project:
+Nothing to install. `npx` fetches it from npm on demand — no clone, no leftover files in your
+project:
 
 ```bash
-npx github:nikhilyadavvvv/feature-explorer init
+npx feature-explorer init
 ```
 
 That prints the agent instructions (`PROMPT.md`) to stdout — hand your agent that command
-verbatim (*"run `npx github:nikhilyadavvvv/feature-explorer init` and follow it on the current
-branch"*) and it takes it from there. `build`/`verify` (below) work the same way.
-
-Once it's [published to npm](#publishing) the `github:` prefix drops and it's just
-`npx feature-explorer init`.
+verbatim (*"run `npx feature-explorer init` and follow it on the current branch"*) and it takes
+it from there. `build`/`verify` (below) work the same way.
 
 Prefer a local copy — to read the code, or for the Claude Code shortcut below:
 
@@ -97,8 +96,8 @@ ln -s "$PWD/feature-explorer" ~/.claude/skills/feature-explorer
 Then, in Claude Code: `/feature-explorer`
 
 Using a different agent (Cursor, Copilot, Aider, Codex, plain ChatGPT with file access)? Tell it
-to run `npx github:nikhilyadavvvv/feature-explorer init` (or point it at
-[`PROMPT.md`](PROMPT.md) if you cloned) — same procedure either way.
+to run `npx feature-explorer init` (or point it at [`PROMPT.md`](PROMPT.md) if you cloned) —
+same procedure either way.
 
 ## Use
 
@@ -106,8 +105,8 @@ The agent does the analysis and writes a spec; two scripts do the rest — via `
 `node build.js`/`node verify.js` directly if you cloned.
 
 ```bash
-npx github:nikhilyadavvvv/feature-explorer build  my-feature.spec.json my-feature.html
-npx github:nikhilyadavvvv/feature-explorer verify my-feature.html      my-feature.spec.json
+npx feature-explorer build  my-feature.spec.json my-feature.html
+npx feature-explorer verify my-feature.html      my-feature.spec.json
 open my-feature.html
 ```
 
@@ -164,21 +163,19 @@ index.html      the site above — same theme, no build step, no framework
 
 ## Publishing
 
-`bin/cli.js` + the `bin` field in `package.json` are what make `npx github:nikhilyadavvvv/feature-explorer …`
-work today, with nothing published anywhere — npx clones the repo, reads `package.json`, and runs
-the one script named there. That already works; `npm publish` only shortens the command by
-dropping the `github:` prefix:
+Published — [`feature-explorer`](https://www.npmjs.com/package/feature-explorer) on npm,
+`bin/cli.js` is what `npx feature-explorer …` resolves to. `npx github:nikhilyadavvvv/feature-explorer …`
+still works too (npx clones the repo directly and runs the same `bin` entry) if you'd rather
+bypass the registry entirely.
+
+To ship an update: bump `version` in `package.json`, then from the repo root —
 
 ```bash
-npm login            # once
-npm publish           # from the repo root — bin, build.js, verify.js, template.html, the
-                       # three docs, LICENSE and README ship; everything else is excluded by
-                       # package.json's "files" list
+npm publish --otp=123456   # fresh code from your authenticator app; this account requires 2FA on publish
 ```
 
-After that, `npx feature-explorer …` resolves from the registry instead of GitHub. Bump
-`version` in `package.json` and `npm publish` again for updates — npx always fetches the latest
-unless a version is pinned (`npx feature-explorer@1.0.0`).
+`npx feature-explorer` always resolves the latest published version unless one is pinned
+(`npx feature-explorer@1.0.0`).
 
 ## The site
 
