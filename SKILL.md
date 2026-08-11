@@ -33,15 +33,42 @@ There may be important uncommitted work in the tree. Leave it exactly as you fou
 Never run: `add · commit · checkout · switch · restore · reset · clean · stash · merge · rebase ·
 cherry-pick · revert · pull · push · fetch · apply`. Never modify, reformat or "fix" a source
 file, never install or upgrade anything, never run a formatter or a linter with `--fix`, never
-create files inside the repository's source tree, never stage or unstage anything.
+touch a tracked file, never stage or unstage anything, never edit `.gitignore`.
 
 Do not modify something intending to restore it afterwards.
 
-Before running any command, ask: *can this alter the working tree, index, refs, dependencies or
+Before running any command, ask: *can this alter a tracked file, the index, refs, dependencies or
 configuration?* If yes or unsure, don't.
 
-Write the spec and the page **outside** the repository (or in a gitignored directory). Confirm
-this at the end.
+**Output location: `.feature-explorer/` at the repository root — inside the repo, not off in the
+user's cwd or your own tool's internal scratch directory.** Concretely:
+
+```bash
+ROOT=$(git rev-parse --show-toplevel)
+mkdir -p "$ROOT/.feature-explorer"
+npx feature-explorer build  "$ROOT/.feature-explorer/<branch-slug>.spec.json" "$ROOT/.feature-explorer/<branch-slug>.html"
+```
+
+That directory is deterministic regardless of which subdirectory you were invoked from (real in a
+monorepo), and it's exactly where the user is already looking — inside the repo they're working
+in — rather than some cwd they may not remember or a tool-internal path they can't find. It is
+**not** tracked: don't `git add` it, and don't edit `.gitignore` to cover it either (that's still
+editing a tracked file). If `git check-ignore .feature-explorer` fails (the directory isn't
+covered by an existing rule), just say so in your final report and suggest the user add it
+themselves — never make that edit for them.
+
+"Read-only" means precisely this: no tracked file is touched, nothing is staged, no commit/branch/
+ref changes. A new *untracked* directory sitting in the working tree satisfies that — `git status`
+in the target repo shows it as untracked, never as modified, and it costs the user one `rm -rf
+.feature-explorer` to remove entirely.
+
+After `verify.js` passes, try to open the page for them: `open <path>` (macOS), `xdg-open <path>`
+(Linux), `start <path>` (Windows) — best-effort, swallow the error if there's no display. Either
+way, end by printing the exact absolute path.
+
+Confirm all of this at the end: where you wrote it, whether it's covered by an existing
+`.gitignore` rule, whether you opened it, and that no tracked file, stage, branch, commit or ref
+changed.
 
 ## 1. Establish scope with as little git as possible
 
@@ -136,9 +163,11 @@ line of a 200-line function — choose the parts that carry the design.
 ## 7. Build, verify, and check before sharing
 
 ```bash
-node build.js  <spec.json> <out.html>
-node verify.js <out.html>   <spec.json>
+npx feature-explorer build  <spec.json> <out.html>
+npx feature-explorer verify <out.html>   <spec.json>
 ```
+
+(`node build.js`/`node verify.js` if you have a local clone — identical either way.)
 
 `verify.js` must exit 0. If it reports a mismatch, the line numbers in the spec are wrong — fix
 the range, never the quoted text.
@@ -148,9 +177,8 @@ embedded, and ordinary source routinely contains hardcoded IDs, internal hostnam
 and comments describing security weaknesses. Tell the user what the page contains and let them
 decide where it can live. `meta.repos` holds local paths and is written into the page.
 
-Finally, report: branch(es), base, files by status, whether uncommitted work is included, node
-and edge counts, output path, the verifier result — and confirm explicitly that no repository
-file, index, branch, commit or dependency was touched.
+Open it, and report as described at the end of section 0 — output path, whether it's opened,
+whether `.gitignore` already covers it, the verifier result, and that no tracked file changed.
 
 ## 8. If tests exist, they are part of the architecture
 

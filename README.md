@@ -105,10 +105,16 @@ The agent does the analysis and writes a spec; two scripts do the rest — via `
 `node build.js`/`node verify.js` directly if you cloned.
 
 ```bash
-npx feature-explorer build  my-feature.spec.json my-feature.html
-npx feature-explorer verify my-feature.html      my-feature.spec.json
-open my-feature.html
+npx feature-explorer build  .feature-explorer/my-feature.spec.json .feature-explorer/my-feature.html
+npx feature-explorer verify .feature-explorer/my-feature.html      .feature-explorer/my-feature.spec.json
+open .feature-explorer/my-feature.html
 ```
+
+`.feature-explorer/` at the repo root is where `PROMPT.md`/`SKILL.md` tell the agent to put
+output — inside the repo you're already looking at, but untracked, so `git status` shows it as
+untracked (never modified) and it's one `rm -rf .feature-explorer` away from gone. Nothing writes
+to `.gitignore` for you; if `git check-ignore .feature-explorer` says it isn't already covered,
+add it yourself if you want it to stop showing up in `git status`.
 
 `build.js` refuses to build a spec that is structurally broken — dangling edge endpoints, a node
 in no group, overlapping boxes, a line range past end-of-file — so those never reach the page.
@@ -136,6 +142,10 @@ node verify.js demo/demo.html demo/ky-retry-methods.spec.json
   and starts overwhelming. Prefer collapsing detail into fewer, better-chosen nodes.
 - **A generated page embeds real source code.** That makes it a private artifact by default —
   see below.
+- **Where the file lands depends on the agent.** `PROMPT.md`/`SKILL.md` say: `.feature-explorer/`
+  at the repo root, untracked — never the tool's own internal scratch folder — but not every
+  agent honours that. If you can't find the output, check whatever your agent reported as the
+  absolute path before assuming the run failed.
 
 ## Before you share a page
 

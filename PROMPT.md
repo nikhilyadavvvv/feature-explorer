@@ -15,16 +15,35 @@ Analyse the feature on the current branch and produce an interactive HTML explor
 1. Establish scope (branch, merge-base, changed files, uncommitted work) with read-only git.
 2. Read the changed code, plus enough surrounding code to know who calls it and what it calls.
 3. Write a spec JSON: nodes, groups, edges, files, and explanations. **Line ranges, never pasted code.**
-4. `npx feature-explorer build <spec.json> <out.html>` (or `node build.js …` if you cloned the repo)
-5. `npx feature-explorer verify <out.html> <spec.json>` — must exit 0.
-6. Report what you found, and confirm the repository was not modified.
+4. Output goes to `.feature-explorer/` **at the repository root** — inside the repo, so it's
+   right where the user is already looking, but untracked:
+   ```bash
+   ROOT=$(git rev-parse --show-toplevel)
+   mkdir -p "$ROOT/.feature-explorer"
+   ```
+   Name the files `<branch-slug>.spec.json` and `<branch-slug>.html` inside it. Repo root (not
+   cwd) makes the location deterministic even from a subdirectory in a monorepo. Do **not**
+   `git add` it, and do **not** edit `.gitignore` to cover it — that's still editing a tracked
+   file. If `git check-ignore .feature-explorer` fails, just note that in your final report; let
+   the user decide whether to add the rule themselves.
+5. `npx feature-explorer build <spec.json> <out.html>` (or `node build.js …` if you cloned the repo)
+6. `npx feature-explorer verify <out.html> <spec.json>` — must exit 0.
+7. Try to open it for them — `open <path>` (macOS) / `xdg-open <path>` (Linux) / `start <path>`
+   (Windows). Best-effort: don't fail the task if there's no display to open it on.
+8. Report what you found, the absolute path, whether `.gitignore` already covers it, whether you
+   opened it, and confirm no tracked file, stage, branch, commit or ref changed.
 
 ## Non-negotiable
 
-- **Read-only.** No `add · commit · checkout · switch · restore · reset · clean · stash · merge ·
-  rebase · cherry-pick · revert · pull · push · fetch · apply`. No edits, no formatters, no
-  installs, nothing staged, no files written inside the repo's source tree. There may be
-  uncommitted work in the tree — leave it untouched.
+- **Read-only w.r.t. tracked state.** No `add · commit · checkout · switch · restore · reset ·
+  clean · stash · merge · rebase · cherry-pick · revert · pull · push · fetch · apply`. No edits
+  to any tracked file (`.gitignore` included), no formatters, no installs, nothing staged. There
+  may be uncommitted work in the tree — leave it untouched. The one filesystem change allowed is
+  the new *untracked* `.feature-explorer/` directory — `git status` shows it as untracked, never
+  modified, and it's one `rm -rf` away from gone.
+- **Land the deliverable somewhere findable.** `.feature-explorer/` at repo root, absolute path
+  reported, ideally opened for them — never your own tool's internal artifact store, where
+  "output goes in the repo" quietly turns into "output goes wherever is convenient for me."
 - **The working tree is the truth.** Explain files as they exist on disk now, including
   uncommitted edits. Never check out an old version to read it.
 - **Never transcribe code.** Segments are `{"from": N, "to": M}`; the builder reads the lines.
